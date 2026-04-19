@@ -1,4 +1,4 @@
-const API_URL = "PASTE_YOUR_RAILWAY_URL_HERE";
+const API_URL = "https://promptscanner-production.up.railway.app";
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "SCAN_PROMPT") {
