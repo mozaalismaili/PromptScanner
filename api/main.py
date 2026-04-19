@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
     tx_tok, tx_mdl = load_toxicity()
 
     groq_key = os.environ.get("GROQ_API_KEY", "")
+    print(f"GROQ_API_KEY found: {bool(groq_key)} length: {len(groq_key)}")
     if groq_key:
         groq_client = Groq(api_key=groq_key)
         print("Groq client initialized.")
