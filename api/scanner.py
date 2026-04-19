@@ -62,15 +62,18 @@ HF_TOKEN = os.environ.get("HF_TOKEN", "")
 # MODEL DOWNLOAD
 # ─────────────────────────────────────────────────────────────
 def download_models():
-    if not MODELS_DIR.exists():
-        print("Downloading models from HuggingFace...")
-        snapshot_download(
-    repo_id="aynaalh/promptscanner-models",
-    local_dir=str(MODELS_DIR),
+    marker = MODELS_DIR / ".downloaded"
+    if marker.exists():
+        print("Models already downloaded, skipping.")
+        return
+    print("Downloading models from HuggingFace...")
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    snapshot_download(
+        repo_id="aynaalh/promptscanner-models",
+        local_dir=str(MODELS_DIR),
     )
-        print("Models downloaded successfully.")
-    else:
-        print("Models directory already exists, skipping download.")
+    marker.touch()
+    print("Models downloaded successfully.")
 
 # ─────────────────────────────────────────────────────────────
 # REGEX ENGINE
