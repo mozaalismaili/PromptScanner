@@ -65,10 +65,9 @@ def download_models():
     if not MODELS_DIR.exists():
         print("Downloading models from HuggingFace...")
         snapshot_download(
-            repo_id="aynaalh/promptscanner-models",
-            token=HF_TOKEN,
-            local_dir=str(MODELS_DIR),
-        )
+    repo_id="aynaalh/promptscanner-models",
+    local_dir=str(MODELS_DIR),
+    )
         print("Models downloaded successfully.")
     else:
         print("Models directory already exists, skipping download.")
