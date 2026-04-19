@@ -1,5 +1,6 @@
 (() => {
   const SITE_CONFIGS = {
+
     "chat.openai.com":        { textarea: "#prompt-textarea",          sendBtn: '[data-testid="send-button"]' },
     "chatgpt.com":            { textarea: "#prompt-textarea",          sendBtn: '[data-testid="send-button"]' },
     "gemini.google.com":      { textarea: ".ql-editor",               sendBtn: '[aria-label="Send message"]' },
