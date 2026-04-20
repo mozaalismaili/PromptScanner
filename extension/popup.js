@@ -160,6 +160,7 @@ el("btn-rewrite")?.addEventListener("click", async () => {
   chrome.runtime.sendMessage({
     type:      "REWRITE_PROMPT",
     text:      currentOriginal,
+    masked_text: currentResult.masked_text,
     tox_label: tox_label,
   });
 });

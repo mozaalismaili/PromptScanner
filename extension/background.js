@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 
   if (msg.type === "REWRITE_PROMPT") {
-    handleRewrite(msg.text, msg.tox_label, currentTabId);
+    handleRewrite(msg.text, msg.masked_text, msg.tox_label, currentTabId);
   }
 
   if (msg.type === "SEND_DECISION") {
@@ -79,12 +79,12 @@ async function handleScan(text, hostname, tabId) {
   }
 }
 
-async function handleRewrite(text, tox_label, tabId) {
+async function handleRewrite(text, masked_text, tox_label, tabId) {
   try {
     const response = await fetch(`${API_URL}/rewrite`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ text, tox_label }),
+      body:    JSON.stringify({ text, masked_text, tox_label }),
     });
 
     if (!response.ok) throw new Error(`Rewrite API error: ${response.status}`);
