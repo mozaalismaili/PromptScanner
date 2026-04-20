@@ -6,13 +6,13 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 
   if (msg.type === "REWRITE_PROMPT") {
-    handleRewrite(msg.text, msg.tox_label, sender.tab.id);
+    handleRewrite(msg.text, msg.tox_label, sender.tab?.id);
   }
 
   if (msg.type === "SEND_DECISION") {
     chrome.tabs.sendMessage(msg.tabId, {
-      type:         "SEND_DECISION",
-      decision:     msg.decision,
+      type:          "SEND_DECISION",
+      decision:      msg.decision,
       rewrittenText: msg.rewrittenText || "",
       originalText:  msg.originalText  || "",
     });
