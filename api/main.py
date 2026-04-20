@@ -160,7 +160,7 @@ def rewrite(req: RewriteRequest):
 
     try:
         response = groq_client.chat.completions.create(
-            model="qwen-qwq-32b",
+            model="qwen-2.5-7b-instruct",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": req.text.strip()},
