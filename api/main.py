@@ -160,14 +160,14 @@ def rewrite(req: RewriteRequest):
 
     try:
         response = groq_client.chat.completions.create(
-            model="qwen-2.5-7b-instruct",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": req.text.strip()},
-            ],
-            max_tokens=512,
-            temperature=0.7,
-        )
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": req.text.strip()},
+        ],
+        max_tokens=512,
+        temperature=0.7,
+    )
         rewritten = response.choices[0].message.content.strip()
         return {"rewritten": rewritten}
     except Exception as e:
