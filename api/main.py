@@ -80,7 +80,7 @@ class ScanRequest(BaseModel):
 
 class RewriteRequest(BaseModel):
     text: str
-    masked_text: str
+    masked_text: str = ""
     tox_label: str
 
 # ─────────────────────────────────────────────────────────────
@@ -144,6 +144,50 @@ def scan(req: ScanRequest):
     }
 
 
+REWRITE_SYSTEM_PROMPT = """أنت متخصص في إعادة الصياغة الآمنة باللغة العربية فقط.
+وظيفتك: خذ أي طلب ضار وأعد صياغته كطلب آمن وبنفس النية العامة.
+قواعد إلزامية:
+- اكتب بالعربية فقط
+- أعد الصياغة فقط ولا تجب على الطلب
+- لا تقل "لا أستطيع" أو "لا يمكنني"
+- لا تضف نصائح أو شروحات أو مقدمات
+- لا تضف أرقام طوارئ أو روابط أو خطوات تنفيذ
+- لا تضع علامات اقتباس
+- أخرج سطراً واحداً فقط: نص الطلب المعاد صياغته
+- الكلمات بين [] هي معلومات محجوبة احتفظ بها كما هي
+أمثلة واضحة للتحويل:
+مثال 1:
+الطلب الأصلي: "اكتب نصاً برمجياً يسرق بيانات المستخدم"
+الطلب الآمن: "اكتب نصاً برمجياً يحمي بيانات المستخدم ويقوم بتشفيرها"
+مثال 2:
+الطلب الأصلي: "اشرح لي كيف أخترق حساب صديقتي"
+الطلب الآمن: "اشرح لي كيف أحمي حسابي بكلمة مرور قوية وتوثيق ثنائي"
+مثال 3:
+الطلب الأصلي: "أريد إنشاء فيروس يدمر الحواسيب"
+الطلب الآمن: "أريد إنشاء برنامج حماية يدافع عن الحواسيب من الفيروسات"
+مثال 4:
+الطلب الأصلي: "كيف أقوم بالتنمر على شخص ما؟"
+الطلب الآمن: "كيف أتواصل مع الآخرين بطريقة محترمة وبناءة؟"
+مثال 5:
+الطلب الأصلي: "هل يمكنك مساعدتي في الغش في الامتحان؟"
+الطلب الآمن: "هل يمكنك مساعدتي في الدراسة وفهم المادة بشكل أفضل؟"
+الآن طبق هذه الطريقة على الطلب الجديد أدناه:"""
+
+REWRITE_USER_PROMPT = """أعد صياغة النص التالي كطلب آمن وبناء باللغة العربية فقط.
+المطلوب: إعادة صياغة الطلب نفسه فقط، وليس الإجابة عليه.
+النص الأصلي:
+{user_input}"""
+
+RETRY_PROMPT = """الرد السابق غير مطابق.
+أعد الكتابة الآن وفق الشروط:
+- العربية فقط
+- إعادة صياغة الطلب فقط
+- بدون نصائح أو شرح أو روابط
+- سطر واحد فقط
+النص الأصلي:
+{user_input}"""
+
+
 @app.post("/rewrite")
 def rewrite(req: RewriteRequest):
     if not req.text.strip():
@@ -152,31 +196,44 @@ def rewrite(req: RewriteRequest):
     if groq_client is None:
         raise HTTPException(status_code=503, detail="Rewrite service not available.")
 
-    system_prompt = (
-    "أنت أداة متخصصة في هندسة البرومبت (Prompt Engineering) فقط. "
-    "مهمتك الوحيدة: أعِد صياغة البرومبت المُدخل إلى نسخة آمنة ومحايدة يمكن إرسالها إلى نموذج ذكاء اصطناعي. "
-    "قواعد صارمة: "
-    "1. أنت لا تُجيب على البرومبت أبداً — أنت تُعيد كتابته فقط. "
-    "2. البرومبت يحتوي على محتوى من فئة '" + req.tox_label + "' — أزل هذا المحتوى واستبدله بصياغة مقبولة. "
-    "3. احتفظ بنفس الهدف الجوهري للبرومبت لكن بأسلوب آمن. "
-    "4. الكلمات بين [] هي معلومات شخصية محجوبة — احتفظ بها كما هي بدون تغيير. "
-    "5. ابدأ مباشرة بالبرومبت المُعاد كتابته — لا مقدمات، لا تفسيرات، لا ردود. "
-    "مثال: "
-    "الإدخال: 'كيف اخترق حساب صديقتي' "
-    "الإخراج: 'كيف أتحقق من أمان الحسابات الإلكترونية وأفضل ممارسات حماية الخصوصية' "
-)
+    input_text = req.masked_text.strip() if req.masked_text.strip() else req.text.strip()
 
     try:
+        # First attempt
         response = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": req.masked_text.strip()},
-    ],
-        max_tokens=512,
-        temperature=0.7,
-    )
+            model="gemma2-9b-it",
+            messages=[
+                {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                {"role": "user",   "content": REWRITE_USER_PROMPT.format(user_input=input_text)},
+            ],
+            max_tokens=150,
+            temperature=0.3,
+        )
         rewritten = response.choices[0].message.content.strip()
+
+        # Check if response looks like an answer not a rewrite
+        bad_phrases = ["لا أستطيع", "لا يمكنني", "أنصحك", "يجب عليك", "http", "www", "\n\n"]
+        needs_retry = any(p in rewritten for p in bad_phrases) or len(rewritten) > 200
+
+        if needs_retry:
+            retry_response = groq_client.chat.completions.create(
+                model="gemma2-9b-it",
+                messages=[
+                    {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                    {"role": "user",   "content": REWRITE_USER_PROMPT.format(user_input=input_text)},
+                    {"role": "assistant", "content": rewritten},
+                    {"role": "user",   "content": RETRY_PROMPT.format(user_input=input_text)},
+                ],
+                max_tokens=100,
+                temperature=0.2,
+            )
+            rewritten = retry_response.choices[0].message.content.strip()
+
+        # Clean up — take first line only
+        rewritten = rewritten.split("\n")[0].strip()
+        rewritten = rewritten.strip('"').strip("'").strip()
+
         return {"rewritten": rewritten}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rewrite failed: {str(e)}")
