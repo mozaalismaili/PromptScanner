@@ -201,7 +201,7 @@ def rewrite(req: RewriteRequest):
     try:
         # First attempt
         response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",,
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
                 {"role": "user",   "content": REWRITE_USER_PROMPT.format(user_input=input_text)},
