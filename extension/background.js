@@ -20,6 +20,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         decision:      msg.decision,
         rewrittenText: msg.rewrittenText || "",
         originalText:  msg.originalText  || "",
+        maskedText:    msg.maskedText    || "",
       });
     }
   }
