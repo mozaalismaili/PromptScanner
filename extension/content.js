@@ -13,10 +13,19 @@
   if (!config) return;
 
   let interceptActive  = false;
-  let extensionSending = false; // flag: we triggered this send, skip scan
+  let extensionSending = false;
   let lastText         = "";
   let attachedTA       = null;
   let attachedBtn      = null;
+
+  // ── CHECK EXTENSION CONTEXT ───────────────────────────
+  function isExtensionValid() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch (e) {
+      return false;
+    }
+  }
 
   // ── TEXTAREA HELPERS ──────────────────────────────────
 
@@ -27,60 +36,65 @@
 
   function clearTextarea(el) {
     if (!el) return;
-    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, "value"
-      )?.set;
-      if (nativeSetter) nativeSetter.call(el, "");
-      else el.value = "";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    } else {
-      el.focus();
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand("delete", false, null);
-      el.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    }
+    try {
+      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, "value"
+        )?.set;
+        if (nativeSetter) nativeSetter.call(el, "");
+        else el.value = "";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        el.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand("delete", false, null);
+        el.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      }
+    } catch (e) {}
   }
 
   function setTextareaText(el, text) {
     if (!el) return;
-    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, "value"
-      )?.set;
-      if (nativeSetter) nativeSetter.call(el, text);
-      else el.value = text;
-      el.dispatchEvent(new Event("input",  { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    } else {
-      el.focus();
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand("insertText", false, text);
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
-    }
+    try {
+      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, "value"
+        )?.set;
+        if (nativeSetter) nativeSetter.call(el, text);
+        else el.value = text;
+        el.dispatchEvent(new Event("input",  { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        el.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand("insertText", false, text);
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
+      }
+    } catch (e) {}
   }
 
   function triggerSend(ta) {
-    extensionSending = true; // mark as extension-triggered
-    const btn = document.querySelector(config.sendBtn);
-    if (btn && !btn.disabled) {
-      btn.click();
-    } else if (ta) {
-      ta.dispatchEvent(new KeyboardEvent("keydown", {
-        key: "Enter", code: "Enter", keyCode: 13,
-        bubbles: true, cancelable: true, composed: true,
-        shiftKey: false,
-      }));
-    }
-    // Reset flag after send completes
+    extensionSending = true;
+    try {
+      const btn = document.querySelector(config.sendBtn);
+      if (btn && !btn.disabled) {
+        btn.click();
+      } else if (ta) {
+        ta.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Enter", code: "Enter", keyCode: 13,
+          bubbles: true, cancelable: true, composed: true,
+          shiftKey: false,
+        }));
+      }
+    } catch (e) {}
     setTimeout(() => { extensionSending = false; }, 1000);
   }
 
@@ -94,27 +108,41 @@
 
   // ── INTERCEPT ─────────────────────────────────────────
 
- function interceptPrompt(text, ta) {
+  function interceptPrompt(text, ta) {
     if (interceptActive || extensionSending || !text) return;
+    if (!isExtensionValid()) return;
 
-    chrome.storage.sync.get({ autoScan: true }, (settings) => {
-      if (!settings.autoScan) return;
+    try {
+      chrome.storage.sync.get({ autoScan: true }, (settings) => {
+        if (chrome.runtime.lastError) return;
+        if (!settings.autoScan) return;
 
-      interceptActive = true;
-      lastText        = text;
-      clearTextarea(ta);
+        interceptActive = true;
+        lastText        = text;
+        clearTextarea(ta);
 
-      chrome.runtime.sendMessage({
-        type:     "SCAN_PROMPT",
-        text:     text,
-        hostname: hostname,
+        try {
+          chrome.runtime.sendMessage({
+            type:     "SCAN_PROMPT",
+            text:     text,
+            hostname: hostname,
+          });
+        } catch (e) {
+          // Extension context lost — restore text
+          resetInterceptor();
+          if (ta) setTextareaText(ta, text);
+        }
       });
-    });
+    } catch (e) {
+      // Extension context invalidated
+      resetInterceptor();
+    }
   }
 
   // ── EVENT HANDLERS ────────────────────────────────────
 
   function handleKeydown(e) {
+    if (!isExtensionValid()) return;
     if (extensionSending) return;
     if (e.key !== "Enter" || e.shiftKey || interceptActive) return;
     const ta = document.querySelector(config.textarea);
@@ -127,6 +155,7 @@
   }
 
   function handleSendClick(e) {
+    if (!isExtensionValid()) return;
     if (extensionSending) return;
     if (interceptActive) return;
     const ta = document.querySelector(config.textarea);
@@ -169,6 +198,10 @@
   // ── MUTATION OBSERVER ─────────────────────────────────
 
   const observer = new MutationObserver(() => {
+    if (!isExtensionValid()) {
+      observer.disconnect();
+      return;
+    }
     attachListeners();
     if (interceptActive && !extensionSending) {
       setTimeout(() => { if (interceptActive) resetInterceptor(); }, 5000);
@@ -180,42 +213,40 @@
 
   // ── MESSAGE LISTENER ──────────────────────────────────
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type !== "SEND_DECISION") return;
+  try {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type !== "SEND_DECISION") return;
 
-    const ta = document.querySelector(config.textarea);
+      const ta = document.querySelector(config.textarea);
 
-    if (msg.decision === "cancel") {
-      // Restore text so user can edit it
-      if (lastText && ta) setTextareaText(ta, lastText);
-      resetInterceptor();
-      return;
-    }
-
-    const textToSend = msg.decision === "rewritten"
-      ? msg.rewrittenText
-      : msg.decision === "masked"
-      ? msg.maskedText
-      : msg.originalText || lastText;
-
-    resetInterceptor();
-
-    if (!textToSend || !ta) return;
-
-    // Step 1: set text
-    setTextareaText(ta, textToSend);
-
-    // Step 2: wait for framework to register, then send
-    setTimeout(() => {
-      const current = getTextareaText(ta);
-      if (current) {
-        triggerSend(ta);
-      } else {
-        setTextareaText(ta, textToSend);
-        setTimeout(() => triggerSend(ta), 300);
+      if (msg.decision === "cancel") {
+        if (lastText && ta) setTextareaText(ta, lastText);
+        resetInterceptor();
+        return;
       }
-      setTimeout(() => attachListeners(), 800);
-    }, 400);
-  });
+
+      const textToSend =
+        msg.decision === "rewritten" ? msg.rewrittenText :
+        msg.decision === "masked"    ? msg.maskedText    :
+        msg.originalText || lastText;
+
+      resetInterceptor();
+
+      if (!textToSend || !ta) return;
+
+      setTextareaText(ta, textToSend);
+
+      setTimeout(() => {
+        const current = getTextareaText(ta);
+        if (current) {
+          triggerSend(ta);
+        } else {
+          setTextareaText(ta, textToSend);
+          setTimeout(() => triggerSend(ta), 300);
+        }
+        setTimeout(() => attachListeners(), 800);
+      }, 400);
+    });
+  } catch (e) {}
 
 })();
