@@ -94,27 +94,28 @@
 
   // ── INTERCEPT ─────────────────────────────────────────
 
-  async function interceptPrompt(text, ta) {
+ function interceptPrompt(text, ta) {
     if (interceptActive || extensionSending || !text) return;
 
-    const settings = await chrome.storage.sync.get({ autoScan: true });
-    if (!settings.autoScan) return;
+    chrome.storage.sync.get({ autoScan: true }, (settings) => {
+      if (!settings.autoScan) return;
 
-    interceptActive = true;
-    lastText        = text;
-    clearTextarea(ta);
+      interceptActive = true;
+      lastText        = text;
+      clearTextarea(ta);
 
-    chrome.runtime.sendMessage({
-      type:     "SCAN_PROMPT",
-      text:     text,
-      hostname: hostname,
+      chrome.runtime.sendMessage({
+        type:     "SCAN_PROMPT",
+        text:     text,
+        hostname: hostname,
+      });
     });
   }
 
   // ── EVENT HANDLERS ────────────────────────────────────
 
   function handleKeydown(e) {
-    if (extensionSending) return; // skip — we triggered this
+    if (extensionSending) return;
     if (e.key !== "Enter" || e.shiftKey || interceptActive) return;
     const ta = document.querySelector(config.textarea);
     if (!ta) return;
@@ -126,7 +127,7 @@
   }
 
   function handleSendClick(e) {
-    if (extensionSending) return; // skip — we triggered this
+    if (extensionSending) return;
     if (interceptActive) return;
     const ta = document.querySelector(config.textarea);
     if (!ta) return;
