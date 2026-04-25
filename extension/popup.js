@@ -44,16 +44,68 @@ let currentOriginal = null;
 let currentTabId    = null;
 let rewrittenText   = null;
 let userSettings    = { ...DEFAULTS };
+let settingsOpen    = false;
 
 function show(id) { document.getElementById(id)?.classList.remove("hidden"); }
 function hide(id) { document.getElementById(id)?.classList.add("hidden"); }
 function el(id)   { return document.getElementById(id); }
 
+// ── SETTINGS ──────────────────────────────────────────────
 async function loadSettings() {
   userSettings = await chrome.storage.sync.get(DEFAULTS);
-  if (userSettings.darkMode) document.body.classList.add("dark");
+  applyDarkMode(userSettings.darkMode);
+  el("s-darkMode").checked = userSettings.darkMode;
+  el("s-showSafe").checked  = userSettings.showSafe;
+  el("s-autoScan").checked  = userSettings.autoScan;
+
+  el("s-darkMode").addEventListener("change", (e) => {
+    applyDarkMode(e.target.checked);
+  });
 }
 
+function applyDarkMode(enabled) {
+  document.body.classList.toggle("dark", enabled);
+}
+
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  const gearBtn = el("btn-settings-toggle");
+
+  if (settingsOpen) {
+    hide("loading-view");
+    hide("result-view");
+    hide("error-view");
+    show("settings-view");
+    gearBtn.classList.add("active");
+    gearBtn.textContent = "✕";
+  } else {
+    hide("settings-view");
+    gearBtn.classList.remove("active");
+    gearBtn.textContent = "⚙";
+    if (currentResult) {
+      show("result-view");
+    } else {
+      show("loading-view");
+    }
+  }
+}
+
+el("btn-settings-toggle")?.addEventListener("click", toggleSettings);
+
+el("btn-save-settings")?.addEventListener("click", async () => {
+  const newSettings = {
+    darkMode: el("s-darkMode").checked,
+    showSafe: el("s-showSafe").checked,
+    autoScan: el("s-autoScan").checked,
+  };
+  await chrome.storage.sync.set(newSettings);
+  userSettings = newSettings;
+  applyDarkMode(newSettings.darkMode);
+  show("saved-msg");
+  setTimeout(() => hide("saved-msg"), 2000);
+});
+
+// ── HELPERS ──────────────────────────────────────────────
 function buildMaskedHtml(maskedText) {
   return maskedText.replace(/\[(.*?)\]/g, (match, type) => {
     const arLabel = PII_LABELS_AR[type] || type;
@@ -74,7 +126,7 @@ function buildHighlightHtml(words, scores, isStop, colorHex) {
       return `<span class="hl-word hl-stop">${word}</span>`;
     } else if (score > 0.7) {
       const a = (0.15 + score * 0.75).toFixed(2);
-      return `<span class="hl-word hl-high" style="background:rgba(${rgb},${a});" title="${score.toFixed(2)}">${word}</span>`;
+      return `<span class="hl-word hl-high" style="background:rgba(${rgb},${a});">${word}</span>`;
     } else if (score > 0.4) {
       const a = (0.1 + score * 0.65).toFixed(2);
       return `<span class="hl-word hl-med" style="background:rgba(${rgb},${a});color:${colorHex};">${word}</span>`;
@@ -94,14 +146,26 @@ function isSafe(result) {
   return !hasPii && isNormal;
 }
 
+function sendDecision(decision) {
+  chrome.runtime.sendMessage({
+    type:          "SEND_DECISION",
+    decision:      decision,
+    tabId:         currentTabId,
+    originalText:  currentOriginal,
+    rewrittenText: rewrittenText || "",
+  });
+  window.close();
+}
+
+// ── RENDER ──────────────────────────────────────────────
 function renderResult(result) {
   hide("loading-view");
   hide("error-view");
+  hide("settings-view");
   show("result-view");
 
   el("elapsed-text").textContent = `تم الفحص في ${result.elapsed}s`;
 
-  // Masked text
   const maskedBox = el("masked-text");
   if (result.pii && result.pii.length > 0) {
     maskedBox.innerHTML = buildMaskedHtml(result.masked_text);
@@ -109,7 +173,6 @@ function renderResult(result) {
     maskedBox.innerHTML = `<span class="no-pii">✓ لا توجد معلومات شخصية</span>`;
   }
 
-  // Toxicity
   const tox = result.tox;
   if (tox) {
     const arLabel = TOX_LABELS_AR[tox.prediction] || tox.prediction;
@@ -126,7 +189,6 @@ function renderResult(result) {
     el("pbar-fill").style.width           = `${conf}%`;
     el("pbar-fill").style.background      = color;
 
-    // Keywords
     if (tox.words && tox.words.length > 0 && tox.prediction !== "Normal") {
       el("hl-words").innerHTML = buildHighlightHtml(
         tox.words, tox.scores, tox.is_stop, color
@@ -134,7 +196,6 @@ function renderResult(result) {
       show("hl-section");
     }
 
-    // Show rewrite button only if flagged
     if (tox.prediction !== "Normal") {
       show("btn-rewrite");
     }
@@ -150,17 +211,7 @@ function renderError(msg) {
   el("error-msg").textContent = msg || "حدث خطأ غير متوقع.";
 }
 
-function sendDecision(decision) {
-  chrome.runtime.sendMessage({
-    type:          "SEND_DECISION",
-    decision:      decision,
-    tabId:         currentTabId,
-    originalText:  currentOriginal,
-    rewrittenText: rewrittenText || "",
-  });
-  window.close();
-}
-
+// ── INIT ──────────────────────────────────────────────
 async function init() {
   await loadSettings();
 
@@ -179,7 +230,6 @@ async function init() {
   if (data.scanResult) {
     currentResult = data.scanResult;
 
-    // Auto-send if safe and user disabled showSafe
     if (isSafe(currentResult) && !userSettings.showSafe) {
       sendDecision("original");
       return;
@@ -191,12 +241,7 @@ async function init() {
   }
 }
 
-// Settings button
-el("btn-settings")?.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
-});
-
-// Rewrite
+// ── BUTTON LISTENERS ──────────────────────────────────────
 el("btn-rewrite")?.addEventListener("click", () => {
   if (!currentResult || !currentOriginal) return;
   const tox_label = currentResult.tox?.prediction || "Offensive";
@@ -210,21 +255,16 @@ el("btn-rewrite")?.addEventListener("click", () => {
   });
 });
 
-// Cancel
-el("btn-cancel")?.addEventListener("click", () => sendDecision("cancel"));
+el("btn-cancel")?.addEventListener("click",       () => sendDecision("cancel"));
 el("btn-cancel-error")?.addEventListener("click", () => sendDecision("cancel"));
-
-// Send original
-el("btn-send-orig")?.addEventListener("click", () => sendDecision("original"));
-el("btn-send-anyway")?.addEventListener("click", () => sendDecision("original"));
-
-// Send rewritten
+el("btn-send-anyway")?.addEventListener("click",  () => sendDecision("original"));
+el("btn-send-orig")?.addEventListener("click",    () => sendDecision("original"));
 el("btn-send-new")?.addEventListener("click", () => {
   if (!rewrittenText) return;
   sendDecision("rewritten");
 });
 
-// Rewrite result listener
+// ── REWRITE LISTENER ──────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "REWRITE_RESULT") {
     hide("rewrite-loading");

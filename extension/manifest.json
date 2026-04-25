@@ -17,7 +17,6 @@
     },
     "default_title": "PromptScanner"
   },
-  "options_page": "options.html",
   "permissions": [
     "activeTab",
     "storage",

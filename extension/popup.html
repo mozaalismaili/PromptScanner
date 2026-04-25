@@ -8,6 +8,7 @@
 </head>
 <body>
 
+  <!-- HEADER -->
   <div class="header">
     <div class="header-right">
       <img src="icons/logo.png" alt="logo" class="header-logo-img"
@@ -18,11 +19,11 @@
       </div>
     </div>
     <div class="header-actions">
-      <button class="icon-btn" id="btn-settings" title="الإعدادات">⚙</button>
+      <button class="icon-btn" id="btn-settings-toggle" title="الإعدادات">⚙</button>
     </div>
   </div>
 
-  <!-- Loading -->
+  <!-- LOADING -->
   <div id="loading-view" class="view">
     <div class="loading-box">
       <div class="spinner-ring"></div>
@@ -30,19 +31,19 @@
     </div>
   </div>
 
-  <!-- Error -->
+  <!-- ERROR -->
   <div id="error-view" class="view hidden">
     <div class="error-box">
       <div class="error-icon">✕</div>
       <div class="error-msg" id="error-msg">حدث خطأ في الاتصال بالخادم.</div>
     </div>
-    <div class="btn-send-row">
+    <div class="btn-send-row" style="margin-top:12px;">
       <button class="btn-send-orig" id="btn-send-anyway">⟶ إرسال على أي حال</button>
       <button class="btn-cancel" id="btn-cancel-error">✕ إلغاء</button>
     </div>
   </div>
 
-  <!-- Results -->
+  <!-- RESULTS -->
   <div id="result-view" class="view hidden">
 
     <div class="elapsed-row">
@@ -59,9 +60,7 @@
         <div class="tox-badge" id="tox-badge"></div>
       </div>
       <div class="tox-conf" id="tox-conf"></div>
-      <div class="pbar-bg">
-        <div class="pbar-fill" id="pbar-fill"></div>
-      </div>
+      <div class="pbar-bg"><div class="pbar-fill" id="pbar-fill"></div></div>
     </div>
 
     <div id="hl-section" class="hidden">
@@ -79,7 +78,7 @@
     </div>
 
     <div id="rewrite-section" class="hidden">
-      <div class="section-label" style="color: var(--teal);">◆ النص المُعاد كتابته</div>
+      <div class="section-label" style="color:var(--teal);">◆ النص المُعاد كتابته</div>
       <div class="rewrite-box" id="rewrite-box"></div>
     </div>
 
@@ -87,11 +86,59 @@
       <button class="btn-rewrite hidden" id="btn-rewrite">✦ إعادة الصياغة</button>
       <button class="btn-cancel" id="btn-cancel">✕ إلغاء</button>
     </div>
-
     <div class="btn-send-row">
       <button class="btn-send-orig" id="btn-send-orig">⟶ إرسال الأصلي</button>
       <button class="btn-send-new hidden" id="btn-send-new">⟶ إرسال المُعاد كتابته</button>
     </div>
+
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div id="settings-view" class="view hidden">
+
+    <div class="settings-section">
+      <div class="settings-section-title">◆ المظهر</div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">الوضع الداكن</div>
+          <div class="setting-desc">تفعيل المظهر الداكن في النافذة</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="s-darkMode" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">◆ السلوك</div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">عرض النافذة للمحتوى الآمن</div>
+          <div class="setting-desc">إذا كان المحتوى آمناً، اعرض النافذة. وإلا أرسل تلقائياً</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="s-showSafe" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">الفحص التلقائي</div>
+          <div class="setting-desc">فحص المحتوى عند الضغط على إرسال أو Enter</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="s-autoScan" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <button class="btn-save-settings" id="btn-save-settings">✓ حفظ الإعدادات</button>
+    <div class="saved-msg hidden" id="saved-msg">تم الحفظ بنجاح</div>
 
   </div>
 
