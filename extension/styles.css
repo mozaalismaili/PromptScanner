@@ -421,3 +421,34 @@ body.dark .toggle-slider { background: rgba(255,255,255,0.1); }
   margin-top: 8px;
   letter-spacing: 0.05em;
 }
+
+/* ── LANGUAGE TOGGLE ── */
+.lang-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  flex-shrink: 0;
+}
+.lang-btn {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  color: var(--sub);
+  transition: background 0.2s, color 0.2s;
+}
+.lang-btn.active {
+  background: var(--orange);
+  color: #fff;
+}
+.lang-btn:hover:not(.active) {
+  background: var(--border);
+  color: var(--text);
+}
