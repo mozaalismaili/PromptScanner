@@ -15,8 +15,10 @@ const STRINGS = {
     btnRewrite:     "✦ إعادة الصياغة",
     btnCancel:      "✕ إلغاء",
     btnSendOrig:    "⟶ إرسال الأصلي",
+    btnSendMasked:  "⟶ إرسال المُقنَّع",
     btnSendNew:     "⟶ إرسال المُعاد كتابته",
     btnSendAnyway:  "⟶ إرسال على أي حال",
+    btnSend:        "⟶ إرسال",
     btnSave:        "✓ حفظ الإعدادات",
     saved:          "تم الحفظ بنجاح",
     rewriteFail:    "فشل في إعادة الصياغة. حاول مرة أخرى.",
@@ -71,8 +73,10 @@ const STRINGS = {
     btnRewrite:     "✦ Rewrite",
     btnCancel:      "✕ Cancel",
     btnSendOrig:    "⟶ Send Original",
+    btnSendMasked:  "⟶ Send Masked",
     btnSendNew:     "⟶ Send Rewritten",
     btnSendAnyway:  "⟶ Send Anyway",
+    btnSend:        "⟶ Send",
     btnSave:        "✓ Save Settings",
     saved:          "Settings saved!",
     rewriteFail:    "Rewrite failed. Please try again.",
@@ -114,7 +118,6 @@ const STRINGS = {
   },
 };
 
-// ── DEFAULTS ──────────────────────────────────────────────
 const DEFAULTS = {
   darkMode: false,
   showSafe: false,
@@ -124,97 +127,112 @@ const DEFAULTS = {
 
 let currentResult   = null;
 let currentOriginal = null;
+let currentMasked   = null;
 let currentTabId    = null;
 let rewrittenText   = null;
 let userSettings    = { ...DEFAULTS };
 let settingsOpen    = false;
-let S               = STRINGS.ar; // active strings
+let S               = STRINGS.ar;
 
 function show(id) { document.getElementById(id)?.classList.remove("hidden"); }
 function hide(id) { document.getElementById(id)?.classList.add("hidden"); }
 function el(id)   { return document.getElementById(id); }
 function setText(id, text) { const e = el(id); if (e) e.textContent = text; }
 
-// ── LANGUAGE ──────────────────────────────────────────────
+// ── SCENARIO DETECTION ────────────────────────────────────
+function getScenario(result) {
+  const hasPii = result.pii && result.pii.length > 0;
+  const tox    = result.tox?.prediction;
+  const isTox  = tox && tox !== "Normal";
+  if (isTox)  return "toxic";   // toxic (with or without PII)
+  if (hasPii) return "pii";     // PII only, no toxicity
+  return "safe";                // everything clean
+}
+
+// ── SEND DECISION ─────────────────────────────────────────
+function sendDecision(decision) {
+  chrome.runtime.sendMessage({
+    type:          "SEND_DECISION",
+    decision:      decision,
+    tabId:         currentTabId,
+    originalText:  currentOriginal,
+    maskedText:    currentMasked  || "",
+    rewrittenText: rewrittenText  || "",
+  });
+  window.close();
+}
+
+// ── LANGUAGE ─────────────────────────────────────────────
 function applyLanguage(lang) {
   S = STRINGS[lang] || STRINGS.ar;
   const isRtl = lang === "ar";
-
   document.documentElement.lang = lang;
   document.documentElement.dir  = isRtl ? "rtl" : "ltr";
   document.body.style.direction  = isRtl ? "rtl" : "ltr";
 
-  setText("h-tagline",        S.tagline);
-  setText("t-scanning",       S.scanning);
-  setText("t-rewriting",      S.rewriting);
-  setText("l-masked",         S.lMasked);
-  setText("l-tox",            S.lTox);
-  setText("l-keywords",       S.lKeywords);
-  setText("l-rewritten",      S.lRewritten);
-  setText("btn-rewrite",      S.btnRewrite);
-  setText("btn-cancel",       S.btnCancel);
-  setText("btn-cancel-error", S.btnCancel);
-  setText("btn-send-orig",    S.btnSendOrig);
-  setText("btn-send-new",     S.btnSendNew);
-  setText("btn-send-anyway",  S.btnSendAnyway);
-  setText("btn-save-settings",S.btnSave);
-  setText("saved-msg",        S.saved);
-  setText("s-title-appearance",S.sTitleAppear);
-  setText("s-title-behavior", S.sTitleBehavior);
-  setText("s-label-dark",     S.sLabelDark);
-  setText("s-desc-dark",      S.sDescDark);
-  setText("s-label-lang",     S.sLabelLang);
-  setText("s-desc-lang",      S.sDescLang);
-  setText("s-label-showSafe", S.sLabelShowSafe);
-  setText("s-desc-showSafe",  S.sDescShowSafe);
-  setText("s-label-autoScan", S.sLabelAutoScan);
-  setText("s-desc-autoScan",  S.sDescAutoScan);
+  setText("h-tagline",          S.tagline);
+  setText("t-scanning",         S.scanning);
+  setText("t-rewriting",        S.rewriting);
+  setText("l-masked",           S.lMasked);
+  setText("l-tox",              S.lTox);
+  setText("l-keywords",         S.lKeywords);
+  setText("l-rewritten",        S.lRewritten);
+  setText("btn-rewrite",        S.btnRewrite);
+  setText("btn-cancel",         S.btnCancel);
+  setText("btn-cancel-pii",     S.btnCancel);
+  setText("btn-cancel-tox",     S.btnCancel);
+  setText("btn-cancel-safe",    S.btnCancel);
+  setText("btn-cancel-error",   S.btnCancel);
+  setText("btn-send-masked",    S.btnSendMasked);
+  setText("btn-send-orig-pii",  S.btnSendOrig);
+  setText("btn-send-orig-tox",  S.btnSendOrig);
+  setText("btn-send-rewritten", S.btnSendNew);
+  setText("btn-send-safe",      S.btnSend);
+  setText("btn-send-anyway",    S.btnSendAnyway);
+  setText("btn-save-settings",  S.btnSave);
+  setText("saved-msg",          S.saved);
+  setText("s-title-appearance", S.sTitleAppear);
+  setText("s-title-behavior",   S.sTitleBehavior);
+  setText("s-label-dark",       S.sLabelDark);
+  setText("s-desc-dark",        S.sDescDark);
+  setText("s-label-lang",       S.sLabelLang);
+  setText("s-desc-lang",        S.sDescLang);
+  setText("s-label-showSafe",   S.sLabelShowSafe);
+  setText("s-desc-showSafe",    S.sDescShowSafe);
+  setText("s-label-autoScan",   S.sLabelAutoScan);
+  setText("s-desc-autoScan",    S.sDescAutoScan);
 
-  // Update active lang button
   document.querySelectorAll(".lang-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.lang === lang);
   });
 
-  // Re-render results if visible
-  if (currentResult && !settingsOpen) {
-    renderResult(currentResult);
-  }
+  if (currentResult && !settingsOpen) renderResult(currentResult);
 }
 
-// ── DARK MODE ─────────────────────────────────────────────
 function applyDarkMode(enabled) {
   document.body.classList.toggle("dark", enabled);
 }
 
-// ── SETTINGS ──────────────────────────────────────────────
+// ── SETTINGS ─────────────────────────────────────────────
 async function loadSettings() {
   userSettings = await chrome.storage.sync.get(DEFAULTS);
   S = STRINGS[userSettings.language] || STRINGS.ar;
-
   applyDarkMode(userSettings.darkMode);
   applyLanguage(userSettings.language);
-
   el("s-darkMode").checked = userSettings.darkMode;
   el("s-showSafe").checked  = userSettings.showSafe;
   el("s-autoScan").checked  = userSettings.autoScan;
-
   el("s-darkMode").addEventListener("change", (e) => applyDarkMode(e.target.checked));
-
   document.querySelectorAll(".lang-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      applyLanguage(btn.dataset.lang);
-    });
+    btn.addEventListener("click", () => applyLanguage(btn.dataset.lang));
   });
 }
 
 function toggleSettings() {
   settingsOpen = !settingsOpen;
   const gearBtn = el("btn-settings-toggle");
-
   if (settingsOpen) {
-    hide("loading-view");
-    hide("result-view");
-    hide("error-view");
+    hide("loading-view"); hide("result-view"); hide("error-view");
     show("settings-view");
     gearBtn.classList.add("active");
     gearBtn.textContent = "✕";
@@ -230,12 +248,12 @@ function toggleSettings() {
 el("btn-settings-toggle")?.addEventListener("click", toggleSettings);
 
 el("btn-save-settings")?.addEventListener("click", async () => {
-  const activeLangBtn = document.querySelector(".lang-btn.active");
+  const activeLang = document.querySelector(".lang-btn.active")?.dataset.lang || userSettings.language;
   const newSettings = {
     darkMode: el("s-darkMode").checked,
     showSafe: el("s-showSafe").checked,
     autoScan: el("s-autoScan").checked,
-    language: activeLangBtn?.dataset.lang || userSettings.language,
+    language: activeLang,
   };
   await chrome.storage.sync.set(newSettings);
   userSettings = newSettings;
@@ -247,7 +265,7 @@ el("btn-save-settings")?.addEventListener("click", async () => {
 
 // ── HELPERS ──────────────────────────────────────────────
 function buildMaskedHtml(maskedText) {
-  return maskedText.replace(/\[(.*?)\]/g, (match, type) => {
+  return maskedText.replace(/\[(.*?)\]/g, (_, type) => {
     const label = S.piiLabels[type] || type;
     return `<span class="tag-pii">[${label}]</span>`;
   });
@@ -261,46 +279,24 @@ function buildHighlightHtml(words, scores, isStop, colorHex) {
   const rgb = hexToRgb(colorHex);
   return words.map((word, i) => {
     const score = scores[i];
-    const stop  = isStop[i];
-    if (stop) return `<span class="hl-word hl-stop">${word}</span>`;
-    if (score > 0.7) {
-      return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});">${word}</span>`;
-    } else if (score > 0.4) {
-      return `<span class="hl-word hl-med" style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};">${word}</span>`;
-    } else if (score > 0.1) {
-      return `<span class="hl-word hl-low" style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});">${word}</span>`;
-    }
+    if (isStop[i]) return `<span class="hl-word hl-stop">${word}</span>`;
+    if (score > 0.7) return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});">${word}</span>`;
+    if (score > 0.4) return `<span class="hl-word hl-med"  style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};">${word}</span>`;
+    if (score > 0.1) return `<span class="hl-word hl-low"  style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});">${word}</span>`;
     return `<span class="hl-word hl-dim">${word}</span>`;
   }).join(" ");
 }
 
-function isSafe(result) {
-  const hasPii   = result.pii && result.pii.length > 0;
-  const tox      = result.tox?.prediction;
-  const isNormal = !tox || tox === "Normal";
-  return !hasPii && isNormal;
-}
-
-function sendDecision(decision) {
-  chrome.runtime.sendMessage({
-    type:          "SEND_DECISION",
-    decision:      decision,
-    tabId:         currentTabId,
-    originalText:  currentOriginal,
-    rewrittenText: rewrittenText || "",
-  });
-  window.close();
-}
-
 // ── RENDER ──────────────────────────────────────────────
 function renderResult(result) {
-  hide("loading-view");
-  hide("error-view");
-  hide("settings-view");
+  hide("loading-view"); hide("error-view"); hide("settings-view");
+  hide("actions-pii");  hide("actions-tox"); hide("actions-safe");
+  hide("hl-section");   hide("rewrite-section"); hide("rewrite-loading");
   show("result-view");
 
   el("elapsed-text").textContent = `${S.scannedIn} ${result.elapsed}s`;
 
+  // Masked text
   const maskedBox = el("masked-text");
   if (result.pii && result.pii.length > 0) {
     maskedBox.innerHTML = buildMaskedHtml(result.masked_text);
@@ -308,13 +304,13 @@ function renderResult(result) {
     maskedBox.innerHTML = `<span class="no-pii">${S.noPii}</span>`;
   }
 
+  // Toxicity card
   const tox = result.tox;
   if (tox) {
-    const label  = S.toxLabels[tox.prediction] || tox.prediction;
-    const badge  = S.toxBadges[tox.prediction] || { text: "?", cls: "badge-warn" };
-    const color  = tox.color || "#00C9A7";
-    const conf   = (tox.confidence * 100).toFixed(1);
-
+    const label = S.toxLabels[tox.prediction] || tox.prediction;
+    const badge = S.toxBadges[tox.prediction] || { text: "?", cls: "badge-warn" };
+    const color = tox.color || "#00C9A7";
+    const conf  = (tox.confidence * 100).toFixed(1);
     el("tox-card").style.borderRightColor = color;
     el("tox-label").textContent           = label;
     el("tox-label").style.color           = color;
@@ -324,23 +320,27 @@ function renderResult(result) {
     el("pbar-fill").style.width           = `${conf}%`;
     el("pbar-fill").style.background      = color;
 
-    if (tox.words && tox.words.length > 0 && tox.prediction !== "Normal") {
-      el("hl-words").innerHTML = buildHighlightHtml(
-        tox.words, tox.scores, tox.is_stop, color
-      );
+    if (tox.words?.length > 0 && tox.prediction !== "Normal") {
+      el("hl-words").innerHTML = buildHighlightHtml(tox.words, tox.scores, tox.is_stop, color);
       show("hl-section");
     }
-
-    if (tox.prediction !== "Normal") show("btn-rewrite");
-
   } else {
     el("tox-card").innerHTML = `<div class="no-pii">${S.toxUnavailable}</div>`;
+  }
+
+  // Show correct action buttons based on scenario
+  const scenario = getScenario(result);
+  if (scenario === "pii") {
+    show("actions-pii");
+  } else if (scenario === "toxic") {
+    show("actions-tox");
+  } else {
+    show("actions-safe");
   }
 }
 
 function renderError(msg) {
-  hide("loading-view");
-  hide("result-view");
+  hide("loading-view"); hide("result-view");
   show("error-view");
   el("error-msg").textContent = msg || S.errorConn;
 }
@@ -363,7 +363,10 @@ async function init() {
 
   if (data.scanResult) {
     currentResult = data.scanResult;
-    if (isSafe(currentResult) && !userSettings.showSafe) {
+    currentMasked = data.scanResult.masked_text || "";
+
+    const scenario = getScenario(currentResult);
+    if (scenario === "safe" && !userSettings.showSafe) {
       sendDecision("original");
       return;
     }
@@ -374,6 +377,13 @@ async function init() {
 }
 
 // ── BUTTON LISTENERS ──────────────────────────────────────
+
+// Scenario A — PII only
+el("btn-send-masked")?.addEventListener("click",   () => sendDecision("masked"));
+el("btn-send-orig-pii")?.addEventListener("click", () => sendDecision("original"));
+el("btn-cancel-pii")?.addEventListener("click",    () => sendDecision("cancel"));
+
+// Scenario B — Toxic
 el("btn-rewrite")?.addEventListener("click", () => {
   if (!currentResult || !currentOriginal) return;
   const tox_label = currentResult.tox?.prediction || "Offensive";
@@ -382,27 +392,33 @@ el("btn-rewrite")?.addEventListener("click", () => {
   chrome.runtime.sendMessage({
     type:        "REWRITE_PROMPT",
     text:        currentOriginal,
-    masked_text: currentResult.masked_text || "",
+    masked_text: currentMasked || "",
     tox_label:   tox_label,
   });
 });
-
-el("btn-cancel")?.addEventListener("click",       () => sendDecision("cancel"));
-el("btn-cancel-error")?.addEventListener("click", () => sendDecision("cancel"));
-el("btn-send-anyway")?.addEventListener("click",  () => sendDecision("original"));
-el("btn-send-orig")?.addEventListener("click",    () => sendDecision("original"));
-el("btn-send-new")?.addEventListener("click", () => {
+el("btn-send-rewritten")?.addEventListener("click", () => {
   if (!rewrittenText) return;
   sendDecision("rewritten");
 });
+el("btn-send-orig-tox")?.addEventListener("click", () => sendDecision("original"));
+el("btn-cancel-tox")?.addEventListener("click",    () => sendDecision("cancel"));
 
+// Scenario C — Safe
+el("btn-send-safe")?.addEventListener("click",   () => sendDecision("original"));
+el("btn-cancel-safe")?.addEventListener("click", () => sendDecision("cancel"));
+
+// Error
+el("btn-send-anyway")?.addEventListener("click",  () => sendDecision("original"));
+el("btn-cancel-error")?.addEventListener("click", () => sendDecision("cancel"));
+
+// Rewrite result
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "REWRITE_RESULT") {
     hide("rewrite-loading");
     rewrittenText = msg.rewritten;
     el("rewrite-box").textContent = msg.rewritten;
     show("rewrite-section");
-    show("btn-send-new");
+    show("btn-send-rewritten");
   }
   if (msg.type === "REWRITE_ERROR") {
     hide("rewrite-loading");

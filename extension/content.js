@@ -12,10 +12,11 @@
   const config   = SITE_CONFIGS[hostname];
   if (!config) return;
 
-  let interceptActive = false;
-  let lastText        = "";
-  let attachedTA      = null;
-  let attachedBtn     = null;
+  let interceptActive  = false;
+  let extensionSending = false; // flag: we triggered this send, skip scan
+  let lastText         = "";
+  let attachedTA       = null;
+  let attachedBtn      = null;
 
   // ── TEXTAREA HELPERS ──────────────────────────────────
 
@@ -34,13 +35,12 @@
       else el.value = "";
       el.dispatchEvent(new Event("input", { bubbles: true }));
     } else {
-      // contenteditable (ChatGPT, Claude, Gemini)
       el.focus();
-      const selection = window.getSelection();
+      const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(el);
-      selection.removeAllRanges();
-      selection.addRange(range);
+      sel.removeAllRanges();
+      sel.addRange(range);
       document.execCommand("delete", false, null);
       el.dispatchEvent(new InputEvent("input", { bubbles: true }));
     }
@@ -57,59 +57,51 @@
       el.dispatchEvent(new Event("input",  { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
-      // contenteditable — use insertText for proper React state update
       el.focus();
-      // Select all existing content
-      const selection = window.getSelection();
+      const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(el);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      // Insert new text
+      sel.removeAllRanges();
+      sel.addRange(range);
       document.execCommand("insertText", false, text);
       el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
     }
   }
 
   function triggerSend(ta) {
-    // First try the send button
+    extensionSending = true; // mark as extension-triggered
     const btn = document.querySelector(config.sendBtn);
     if (btn && !btn.disabled) {
       btn.click();
-      return;
-    }
-    // Fallback: simulate Enter on the textarea
-    if (ta) {
+    } else if (ta) {
       ta.dispatchEvent(new KeyboardEvent("keydown", {
         key: "Enter", code: "Enter", keyCode: 13,
         bubbles: true, cancelable: true, composed: true,
         shiftKey: false,
       }));
-      ta.dispatchEvent(new KeyboardEvent("keyup", {
-        key: "Enter", code: "Enter", keyCode: 13,
-        bubbles: true, composed: true,
-      }));
     }
+    // Reset flag after send completes
+    setTimeout(() => { extensionSending = false; }, 1000);
   }
 
   // ── RESET ─────────────────────────────────────────────
 
   function resetInterceptor() {
-    interceptActive = false;
-    lastText        = "";
+    interceptActive  = false;
+    extensionSending = false;
+    lastText         = "";
   }
 
   // ── INTERCEPT ─────────────────────────────────────────
 
   async function interceptPrompt(text, ta) {
-    if (interceptActive || !text) return;
+    if (interceptActive || extensionSending || !text) return;
 
     const settings = await chrome.storage.sync.get({ autoScan: true });
     if (!settings.autoScan) return;
 
     interceptActive = true;
     lastText        = text;
-
     clearTextarea(ta);
 
     chrome.runtime.sendMessage({
@@ -122,6 +114,7 @@
   // ── EVENT HANDLERS ────────────────────────────────────
 
   function handleKeydown(e) {
+    if (extensionSending) return; // skip — we triggered this
     if (e.key !== "Enter" || e.shiftKey || interceptActive) return;
     const ta = document.querySelector(config.textarea);
     if (!ta) return;
@@ -133,6 +126,7 @@
   }
 
   function handleSendClick(e) {
+    if (extensionSending) return; // skip — we triggered this
     if (interceptActive) return;
     const ta = document.querySelector(config.textarea);
     if (!ta) return;
@@ -154,19 +148,16 @@
       delete attachedTA.dataset.psAttached;
       attachedTA = null;
     }
-
     if (attachedBtn && attachedBtn !== btn) {
       attachedBtn.removeEventListener("click", handleSendClick, true);
       delete attachedBtn.dataset.psAttached;
       attachedBtn = null;
     }
-
     if (ta && !ta.dataset.psAttached) {
       ta.addEventListener("keydown", handleKeydown, true);
       ta.dataset.psAttached = "true";
       attachedTA = ta;
     }
-
     if (btn && !btn.dataset.psAttached) {
       btn.addEventListener("click", handleSendClick, true);
       btn.dataset.psAttached = "true";
@@ -178,10 +169,8 @@
 
   const observer = new MutationObserver(() => {
     attachListeners();
-    if (interceptActive) {
-      setTimeout(() => {
-        if (interceptActive) resetInterceptor();
-      }, 5000);
+    if (interceptActive && !extensionSending) {
+      setTimeout(() => { if (interceptActive) resetInterceptor(); }, 5000);
     }
   });
 
@@ -193,46 +182,38 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type !== "SEND_DECISION") return;
 
+    const ta = document.querySelector(config.textarea);
+
     if (msg.decision === "cancel") {
-      resetInterceptor();
-      // Restore original text so user can edit it
-      const ta = document.querySelector(config.textarea);
-      if (ta && lastText) setTextareaText(ta, lastText);
+      // Restore text so user can edit it
+      if (lastText && ta) setTextareaText(ta, lastText);
       resetInterceptor();
       return;
     }
 
     const textToSend = msg.decision === "rewritten"
       ? msg.rewrittenText
+      : msg.decision === "masked"
+      ? msg.maskedText
       : msg.originalText || lastText;
 
-    if (!textToSend) {
-      resetInterceptor();
-      return;
-    }
+    resetInterceptor();
 
-    const ta = document.querySelector(config.textarea);
+    if (!textToSend || !ta) return;
 
-    // Step 1: set text into textarea
+    // Step 1: set text
     setTextareaText(ta, textToSend);
 
-    // Step 2: wait for React/framework to register the new value
+    // Step 2: wait for framework to register, then send
     setTimeout(() => {
-      // Step 3: verify text is there before sending
-      const currentText = getTextareaText(ta);
-      if (currentText) {
+      const current = getTextareaText(ta);
+      if (current) {
         triggerSend(ta);
       } else {
-        // Text didn't stick — try again
         setTextareaText(ta, textToSend);
         setTimeout(() => triggerSend(ta), 300);
       }
-
-      // Step 4: reset after send
-      setTimeout(() => {
-        resetInterceptor();
-        attachListeners();
-      }, 500);
+      setTimeout(() => attachListeners(), 800);
     }, 400);
   });
 

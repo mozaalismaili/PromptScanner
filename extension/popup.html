@@ -35,7 +35,7 @@
   <div id="error-view" class="view hidden">
     <div class="error-box">
       <div class="error-icon">✕</div>
-      <div class="error-msg" id="error-msg">حدث خطأ في الاتصال بالخادم.</div>
+      <div class="error-msg" id="error-msg"></div>
     </div>
     <div class="btn-send-row" style="margin-top:12px;">
       <button class="btn-send-orig" id="btn-send-anyway"></button>
@@ -50,9 +50,11 @@
       <span id="elapsed-text"></span>
     </div>
 
+    <!-- Masked text -->
     <div class="section-label" id="l-masked">◆ النص المُقنَّع</div>
     <div class="masked-box" id="masked-text"></div>
 
+    <!-- Toxicity -->
     <div class="section-label" id="l-tox">◆ تحليل السمية</div>
     <div class="tox-card" id="tox-card">
       <div class="tox-top">
@@ -63,32 +65,57 @@
       <div class="pbar-bg"><div class="pbar-fill" id="pbar-fill"></div></div>
     </div>
 
+    <!-- Keywords -->
     <div id="hl-section" class="hidden">
       <div class="section-label" id="l-keywords">◆ الكلمات المؤثرة</div>
       <div class="hl-box" id="hl-words"></div>
     </div>
 
+    <!-- Rewrite loading -->
     <div id="rewrite-loading" class="hidden">
       <div class="rewrite-loading-text">
         <span class="dot-anim">●</span>
         <span class="dot-anim">●</span>
         <span class="dot-anim">●</span>
-        <span id="t-rewriting">جارٍ إعادة الصياغة بواسطة Qwen…</span>
+        <span id="t-rewriting">جارٍ إعادة الصياغة…</span>
       </div>
     </div>
 
+    <!-- Rewritten text -->
     <div id="rewrite-section" class="hidden">
       <div class="section-label" id="l-rewritten" style="color:var(--teal);">◆ النص المُعاد كتابته</div>
       <div class="rewrite-box" id="rewrite-box"></div>
     </div>
 
-    <div class="btn-row">
-      <button class="btn-rewrite hidden" id="btn-rewrite"></button>
-      <button class="btn-cancel"         id="btn-cancel"></button>
+    <!-- SCENARIO A: PII only — send masked or original -->
+    <div id="actions-pii" class="hidden">
+      <div class="btn-send-row">
+        <button class="btn-send-new"  id="btn-send-masked"></button>
+        <button class="btn-send-orig" id="btn-send-orig-pii"></button>
+      </div>
+      <div class="btn-row" style="margin-top:7px;">
+        <button class="btn-cancel" id="btn-cancel-pii"></button>
+      </div>
     </div>
-    <div class="btn-send-row">
-      <button class="btn-send-orig"          id="btn-send-orig"></button>
-      <button class="btn-send-new hidden"    id="btn-send-new"></button>
+
+    <!-- SCENARIO B: Toxic — rewrite or send original -->
+    <div id="actions-tox" class="hidden">
+      <div class="btn-row">
+        <button class="btn-rewrite" id="btn-rewrite"></button>
+        <button class="btn-cancel"  id="btn-cancel-tox"></button>
+      </div>
+      <div class="btn-send-row" style="margin-top:7px;">
+        <button class="btn-send-new  hidden" id="btn-send-rewritten"></button>
+        <button class="btn-send-orig" id="btn-send-orig-tox"></button>
+      </div>
+    </div>
+
+    <!-- SCENARIO C: Safe — just send -->
+    <div id="actions-safe" class="hidden">
+      <div class="btn-send-row">
+        <button class="btn-send-orig" id="btn-send-safe"></button>
+        <button class="btn-cancel"    id="btn-cancel-safe"></button>
+      </div>
     </div>
 
   </div>
@@ -101,8 +128,8 @@
 
       <div class="setting-row">
         <div class="setting-info">
-          <div class="setting-label"  id="s-label-dark">الوضع الداكن</div>
-          <div class="setting-desc"   id="s-desc-dark">تفعيل المظهر الداكن</div>
+          <div class="setting-label" id="s-label-dark">الوضع الداكن</div>
+          <div class="setting-desc"  id="s-desc-dark">تفعيل المظهر الداكن</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="s-darkMode" />
@@ -115,9 +142,9 @@
           <div class="setting-label" id="s-label-lang">اللغة</div>
           <div class="setting-desc"  id="s-desc-lang">لغة واجهة الإضافة</div>
         </div>
-        <div class="lang-toggle" id="lang-toggle">
-          <button class="lang-btn" id="lang-ar" data-lang="ar">العربية</button>
-          <button class="lang-btn" id="lang-en" data-lang="en">English</button>
+        <div class="lang-toggle">
+          <button class="lang-btn" data-lang="ar">العربية</button>
+          <button class="lang-btn" data-lang="en">English</button>
         </div>
       </div>
     </div>
@@ -128,7 +155,7 @@
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-label" id="s-label-showSafe">عرض النافذة للمحتوى الآمن</div>
-          <div class="setting-desc"  id="s-desc-showSafe">إذا كان المحتوى آمناً، اعرض النافذة</div>
+          <div class="setting-desc"  id="s-desc-showSafe">إذا كان المحتوى آمناً، اعرض النافذة. وإلا أرسل تلقائياً</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="s-showSafe" />
