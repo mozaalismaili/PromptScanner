@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PromptScanner — الإعدادات</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream:   #EAE4D9;
+      --card:    #F3EDE3;
+      --white:   #FDFAF5;
+      --navy:    #0F1C35;
+      --blue:    #2D5BE3;
+      --orange:  #E8520A;
+      --gold:    #C8960A;
+      --ink:     #1A1714;
+      --muted:   #7A7068;
+      --border:  rgba(0,0,0,0.08);
+      --bg:      var(--cream);
+      --surface: var(--card);
+      --text:    var(--ink);
+      --sub:     var(--muted);
+    }
+    body.dark {
+      --bg:      #0F1C35;
+      --surface: #162240;
+      --text:    #EAE4D9;
+      --sub:     #7A8BAA;
+      --border:  rgba(255,255,255,0.07);
+      --card:    #162240;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      transition: background 0.3s, color 0.3s;
+    }
+    .page {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 40px;
+    }
+    .header img {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+    }
+    .header-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .header-title span { color: var(--orange); }
+    .header-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--sub);
+      margin-top: 2px;
+    }
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--sub);
+      margin-bottom: 20px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-info { flex: 1; padding-left: 16px; }
+    .setting-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .setting-desc {
+      font-size: 12px;
+      color: var(--sub);
+      line-height: 1.5;
+    }
+    /* Toggle Switch */
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border: 2px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: 0.3s;
+      background: rgba(0,0,0,0.15);
+    }
+    body.dark .toggle-slider { background: rgba(255,255,255,0.1); }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      right: 2px;
+      top: 2px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.3s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--orange); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(-22px); }
+
+    .save-btn {
+      width: 100%;
+      background: var(--orange);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+    .save-btn:hover { opacity: 0.88; }
+    .saved-msg {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--orange);
+      margin-top: 10px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .saved-msg.show { opacity: 1; }
+    .footer {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--sub);
+      margin-top: 32px;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <img src="icons/logo.png" alt="PromptScanner Logo" onerror="this.style.display='none'" />
+      <div>
+        <div class="header-title">Prompt<span>Scanner</span></div>
+        <div class="header-sub">الإعدادات</div>
+      </div>
+    </div>
+
+    <!-- Appearance -->
+    <div class="section">
+      <div class="section-title">◆ المظهر</div>
+
+      <div class="setting-row">
+        <label class="toggle">
+          <input type="checkbox" id="darkMode" />
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="setting-info">
+          <div class="setting-label">الوضع الداكن</div>
+          <div class="setting-desc">تفعيل المظهر الداكن في النافذة المنبثقة وصفحة الإعدادات</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Behavior -->
+    <div class="section">
+      <div class="section-title">◆ السلوك</div>
+
+      <div class="setting-row">
+        <label class="toggle">
+          <input type="checkbox" id="showSafe" />
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="setting-info">
+          <div class="setting-label">عرض النافذة للمحتوى الآمن</div>
+          <div class="setting-desc">إذا كان المحتوى آمناً وبدون معلومات شخصية، أظهر النافذة المنبثقة. إذا كان مُعطَّلاً، يُرسَل المحتوى الآمن تلقائياً</div>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label class="toggle">
+          <input type="checkbox" id="autoScan" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="setting-info">
+          <div class="setting-label">الفحص التلقائي</div>
+          <div class="setting-desc">فحص المحتوى تلقائياً عند الضغط على إرسال أو Enter</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="save-btn" id="saveBtn">حفظ الإعدادات</button>
+    <div class="saved-msg" id="savedMsg">✓ تم حفظ الإعدادات</div>
+
+    <div class="footer">PromptScanner v1.1.0 — حارس خصوصيتك في الذكاء الاصطناعي</div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

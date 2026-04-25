@@ -29,7 +29,7 @@ async function handleScan(text, hostname, tabId) {
   try {
     if (tabId) {
       chrome.action.setBadgeText({ text: "...", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#f5a623", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#E8520A", tabId });
     }
 
     const response = await fetch(`${API_URL}/scan`, {
@@ -50,15 +50,15 @@ async function handleScan(text, hostname, tabId) {
 
     const hasPii   = result.pii && result.pii.length > 0;
     const tox      = result.tox?.prediction;
-    const isNormal = tox === "Normal" || tox === null || tox === undefined;
+    const isNormal = !tox || tox === "Normal";
 
     if (tabId) {
       if (hasPii || !isNormal) {
         chrome.action.setBadgeText({ text: "!", tabId });
-        chrome.action.setBadgeBackgroundColor({ color: "#ff4d6d", tabId });
+        chrome.action.setBadgeBackgroundColor({ color: "#D93025", tabId });
       } else {
         chrome.action.setBadgeText({ text: "OK", tabId });
-        chrome.action.setBadgeBackgroundColor({ color: "#00c9a7", tabId });
+        chrome.action.setBadgeBackgroundColor({ color: "#00C9A7", tabId });
       }
     }
 
@@ -68,7 +68,7 @@ async function handleScan(text, hostname, tabId) {
     console.error("PromptScanner scan error:", err);
     if (tabId) {
       chrome.action.setBadgeText({ text: "ERR", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#ff4d6d", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#D93025", tabId });
     }
     await chrome.storage.session.set({
       scanError:    err.message,

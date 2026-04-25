@@ -9,13 +9,13 @@ const TOX_LABELS_AR = {
 };
 
 const TOX_BADGES_AR = {
-  "Normal":            { text: "آمن",   cls: "badge-safe" },
-  "Mild Offense":      { text: "تحذير", cls: "badge-warn" },
-  "Offensive":         { text: "تحذير", cls: "badge-warn" },
-  "Privacy Violation": { text: "تحذير", cls: "badge-warn" },
+  "Normal":            { text: "آمن",    cls: "badge-safe" },
+  "Mild Offense":      { text: "تحذير",  cls: "badge-warn" },
+  "Offensive":         { text: "تحذير",  cls: "badge-warn" },
+  "Privacy Violation": { text: "تحذير",  cls: "badge-warn" },
   "Obscene":           { text: "مُبلَّغ", cls: "badge-flag" },
   "Dangerous":         { text: "مُبلَّغ", cls: "badge-flag" },
-  "Mental Health":     { text: "خطر",   cls: "badge-crit" },
+  "Mental Health":     { text: "خطر",    cls: "badge-crit" },
 };
 
 const PII_LABELS_AR = {
@@ -33,22 +33,32 @@ const PII_LABELS_AR = {
   "FINANCIAL_INFO": "معلومات مالية",
 };
 
+const DEFAULTS = {
+  darkMode: false,
+  showSafe: false,
+  autoScan: true,
+};
+
 let currentResult   = null;
 let currentOriginal = null;
 let currentTabId    = null;
 let rewrittenText   = null;
+let userSettings    = { ...DEFAULTS };
 
-function show(id)   { document.getElementById(id)?.classList.remove("hidden"); }
-function hide(id)   { document.getElementById(id)?.classList.add("hidden"); }
-function el(id)     { return document.getElementById(id); }
+function show(id) { document.getElementById(id)?.classList.remove("hidden"); }
+function hide(id) { document.getElementById(id)?.classList.add("hidden"); }
+function el(id)   { return document.getElementById(id); }
 
-function buildMaskedHtml(maskedText, piiEnts) {
-  let html = maskedText;
-  html = html.replace(/\[(.*?)\]/g, (match, type) => {
+async function loadSettings() {
+  userSettings = await chrome.storage.sync.get(DEFAULTS);
+  if (userSettings.darkMode) document.body.classList.add("dark");
+}
+
+function buildMaskedHtml(maskedText) {
+  return maskedText.replace(/\[(.*?)\]/g, (match, type) => {
     const arLabel = PII_LABELS_AR[type] || type;
     return `<span class="tag-pii">[${arLabel}]</span>`;
   });
-  return html;
 }
 
 function buildHighlightHtml(words, scores, isStop, colorHex) {
@@ -61,52 +71,62 @@ function buildHighlightHtml(words, scores, isStop, colorHex) {
     const score = scores[i];
     const stop  = isStop[i];
     if (stop) {
-      return `<span class="hl-word hl-stop" title="حرف وصل">${word}</span>`;
+      return `<span class="hl-word hl-stop">${word}</span>`;
     } else if (score > 0.7) {
       const a = (0.15 + score * 0.75).toFixed(2);
-      return `<span class="hl-word hl-high" style="background:rgba(${rgb},${a});" title="تأثير عالٍ: ${score.toFixed(2)}">${word}</span>`;
+      return `<span class="hl-word hl-high" style="background:rgba(${rgb},${a});" title="${score.toFixed(2)}">${word}</span>`;
     } else if (score > 0.4) {
       const a = (0.1 + score * 0.65).toFixed(2);
-      return `<span class="hl-word hl-med" style="background:rgba(${rgb},${a});color:${colorHex};" title="تأثير متوسط: ${score.toFixed(2)}">${word}</span>`;
+      return `<span class="hl-word hl-med" style="background:rgba(${rgb},${a});color:${colorHex};">${word}</span>`;
     } else if (score > 0.1) {
       const a = (0.05 + score * 0.4).toFixed(2);
-      return `<span class="hl-word hl-low" style="background:rgba(${rgb},${a});" title="تأثير منخفض: ${score.toFixed(2)}">${word}</span>`;
+      return `<span class="hl-word hl-low" style="background:rgba(${rgb},${a});">${word}</span>`;
     } else {
-      return `<span class="hl-word hl-dim" title="${score.toFixed(2)}">${word}</span>`;
+      return `<span class="hl-word hl-dim">${word}</span>`;
     }
   }).join(" ");
 }
 
-function renderResult(result, originalText) {
+function isSafe(result) {
+  const hasPii   = result.pii && result.pii.length > 0;
+  const tox      = result.tox?.prediction;
+  const isNormal = !tox || tox === "Normal";
+  return !hasPii && isNormal;
+}
+
+function renderResult(result) {
   hide("loading-view");
   hide("error-view");
   show("result-view");
 
   el("elapsed-text").textContent = `تم الفحص في ${result.elapsed}s`;
 
+  // Masked text
   const maskedBox = el("masked-text");
   if (result.pii && result.pii.length > 0) {
-    maskedBox.innerHTML = buildMaskedHtml(result.masked_text, result.pii);
+    maskedBox.innerHTML = buildMaskedHtml(result.masked_text);
   } else {
     maskedBox.innerHTML = `<span class="no-pii">✓ لا توجد معلومات شخصية</span>`;
   }
 
+  // Toxicity
   const tox = result.tox;
   if (tox) {
     const arLabel = TOX_LABELS_AR[tox.prediction] || tox.prediction;
     const badge   = TOX_BADGES_AR[tox.prediction] || { text: "غير معروف", cls: "badge-warn" };
-    const color   = tox.color || "#00c9a7";
+    const color   = tox.color || "#00C9A7";
     const conf    = (tox.confidence * 100).toFixed(1);
 
-    el("tox-card").style.borderLeftColor = color;
-    el("tox-label").textContent          = arLabel;
-    el("tox-label").style.color          = color;
-    el("tox-badge").textContent          = badge.text;
-    el("tox-badge").className            = `tox-badge ${badge.cls}`;
-    el("tox-conf").textContent           = `درجة الثقة: ${conf}%`;
-    el("pbar-fill").style.width          = `${conf}%`;
-    el("pbar-fill").style.background     = color;
+    el("tox-card").style.borderRightColor = color;
+    el("tox-label").textContent           = arLabel;
+    el("tox-label").style.color           = color;
+    el("tox-badge").textContent           = badge.text;
+    el("tox-badge").className             = `tox-badge ${badge.cls}`;
+    el("tox-conf").textContent            = `درجة الثقة: ${conf}%`;
+    el("pbar-fill").style.width           = `${conf}%`;
+    el("pbar-fill").style.background      = color;
 
+    // Keywords
     if (tox.words && tox.words.length > 0 && tox.prediction !== "Normal") {
       el("hl-words").innerHTML = buildHighlightHtml(
         tox.words, tox.scores, tox.is_stop, color
@@ -114,8 +134,9 @@ function renderResult(result, originalText) {
       show("hl-section");
     }
 
-    if (tox.prediction === "Normal" && (!result.pii || result.pii.length === 0)) {
-      hide("btn-rewrite");
+    // Show rewrite button only if flagged
+    if (tox.prediction !== "Normal") {
+      show("btn-rewrite");
     }
   } else {
     el("tox-card").innerHTML = `<div class="no-pii">نموذج السمية غير متاح</div>`;
@@ -129,7 +150,20 @@ function renderError(msg) {
   el("error-msg").textContent = msg || "حدث خطأ غير متوقع.";
 }
 
+function sendDecision(decision) {
+  chrome.runtime.sendMessage({
+    type:          "SEND_DECISION",
+    decision:      decision,
+    tabId:         currentTabId,
+    originalText:  currentOriginal,
+    rewrittenText: rewrittenText || "",
+  });
+  window.close();
+}
+
 async function init() {
+  await loadSettings();
+
   const data = await chrome.storage.session.get([
     "scanResult", "scanError", "originalText", "tabId"
   ]);
@@ -144,61 +178,53 @@ async function init() {
 
   if (data.scanResult) {
     currentResult = data.scanResult;
-    renderResult(data.scanResult, data.originalText);
+
+    // Auto-send if safe and user disabled showSafe
+    if (isSafe(currentResult) && !userSettings.showSafe) {
+      sendDecision("original");
+      return;
+    }
+
+    renderResult(currentResult);
   } else {
     show("loading-view");
   }
 }
 
-el("btn-rewrite")?.addEventListener("click", async () => {
+// Settings button
+el("btn-settings")?.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
+
+// Rewrite
+el("btn-rewrite")?.addEventListener("click", () => {
   if (!currentResult || !currentOriginal) return;
   const tox_label = currentResult.tox?.prediction || "Offensive";
-
   hide("btn-rewrite");
   show("rewrite-loading");
-
   chrome.runtime.sendMessage({
-    type:      "REWRITE_PROMPT",
-    text:      currentOriginal,
-    masked_text: currentResult.masked_text,
-    tox_label: tox_label,
+    type:        "REWRITE_PROMPT",
+    text:        currentOriginal,
+    masked_text: currentResult.masked_text || "",
+    tox_label:   tox_label,
   });
 });
 
-el("btn-cancel")?.addEventListener("click", () => {
-  chrome.runtime.sendMessage({
-    type:         "SEND_DECISION",
-    decision:     "cancel",
-    tabId:        currentTabId,
-    originalText: currentOriginal,
-    rewrittenText: "",
-  });
-  window.close();
-});
+// Cancel
+el("btn-cancel")?.addEventListener("click", () => sendDecision("cancel"));
+el("btn-cancel-error")?.addEventListener("click", () => sendDecision("cancel"));
 
-el("btn-send-orig")?.addEventListener("click", () => {
-  chrome.runtime.sendMessage({
-    type:         "SEND_DECISION",
-    decision:     "original",
-    tabId:        currentTabId,
-    originalText: currentOriginal,
-    rewrittenText: rewrittenText || "",
-  });
-  window.close();
-});
+// Send original
+el("btn-send-orig")?.addEventListener("click", () => sendDecision("original"));
+el("btn-send-anyway")?.addEventListener("click", () => sendDecision("original"));
 
+// Send rewritten
 el("btn-send-new")?.addEventListener("click", () => {
   if (!rewrittenText) return;
-  chrome.runtime.sendMessage({
-    type:         "SEND_DECISION",
-    decision:     "rewritten",
-    tabId:        currentTabId,
-    originalText: currentOriginal,
-    rewrittenText: rewrittenText,
-  });
-  window.close();
+  sendDecision("rewritten");
 });
 
+// Rewrite result listener
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "REWRITE_RESULT") {
     hide("rewrite-loading");

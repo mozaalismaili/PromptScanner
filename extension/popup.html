@@ -9,10 +9,20 @@
 <body>
 
   <div class="header">
-    <div class="logo">Prompt<span>Scanner</span></div>
-    <div class="header-sub">فحص الخصوصية والسلامة</div>
+    <div class="header-right">
+      <img src="icons/logo.png" alt="logo" class="header-logo-img"
+           onerror="this.style.display='none'" />
+      <div>
+        <div class="logo">Prompt<span>Scanner</span></div>
+        <div class="header-sub">فحص الخصوصية والسلامة</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="btn-settings" title="الإعدادات">⚙</button>
+    </div>
   </div>
 
+  <!-- Loading -->
   <div id="loading-view" class="view">
     <div class="loading-box">
       <div class="spinner-ring"></div>
@@ -20,18 +30,23 @@
     </div>
   </div>
 
+  <!-- Error -->
   <div id="error-view" class="view hidden">
     <div class="error-box">
       <div class="error-icon">✕</div>
       <div class="error-msg" id="error-msg">حدث خطأ في الاتصال بالخادم.</div>
     </div>
+    <div class="btn-send-row">
+      <button class="btn-send-orig" id="btn-send-anyway">⟶ إرسال على أي حال</button>
+      <button class="btn-cancel" id="btn-cancel-error">✕ إلغاء</button>
+    </div>
   </div>
 
+  <!-- Results -->
   <div id="result-view" class="view hidden">
 
     <div class="elapsed-row">
       <span id="elapsed-text"></span>
-      <span id="model-status"></span>
     </div>
 
     <div class="section-label">◆ النص المُقنَّع</div>
@@ -54,11 +69,6 @@
       <div class="hl-box" id="hl-words"></div>
     </div>
 
-    <div id="rewrite-section" class="hidden">
-      <div class="section-label" style="color: var(--teal);">◆ النص المُعاد كتابته</div>
-      <div class="rewrite-box" id="rewrite-box"></div>
-    </div>
-
     <div id="rewrite-loading" class="hidden">
       <div class="rewrite-loading-text">
         <span class="dot-anim">●</span>
@@ -68,9 +78,14 @@
       </div>
     </div>
 
+    <div id="rewrite-section" class="hidden">
+      <div class="section-label" style="color: var(--teal);">◆ النص المُعاد كتابته</div>
+      <div class="rewrite-box" id="rewrite-box"></div>
+    </div>
+
     <div class="btn-row">
-      <button class="btn-rewrite" id="btn-rewrite">✦ إعادة الصياغة</button>
-      <button class="btn-cancel"  id="btn-cancel">✕ إلغاء</button>
+      <button class="btn-rewrite hidden" id="btn-rewrite">✦ إعادة الصياغة</button>
+      <button class="btn-cancel" id="btn-cancel">✕ إلغاء</button>
     </div>
 
     <div class="btn-send-row">
