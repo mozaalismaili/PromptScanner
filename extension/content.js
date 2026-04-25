@@ -17,10 +17,33 @@
   let attachedTA      = null;
   let attachedBtn     = null;
 
-  // ── TEXTAREA HELPERS ───────────────────────────────────
+  // ── TEXTAREA HELPERS ──────────────────────────────────
+
   function getTextareaText(el) {
     if (!el) return "";
     return (el.innerText || el.value || el.textContent || "").trim();
+  }
+
+  function clearTextarea(el) {
+    if (!el) return;
+    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, "value"
+      )?.set;
+      if (nativeSetter) nativeSetter.call(el, "");
+      else el.value = "";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      // contenteditable (ChatGPT, Claude, Gemini)
+      el.focus();
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("delete", false, null);
+      el.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
   }
 
   function setTextareaText(el, text) {
@@ -34,50 +57,50 @@
       el.dispatchEvent(new Event("input",  { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
+      // contenteditable — use insertText for proper React state update
       el.focus();
-      document.execCommand("selectAll", false, null);
+      // Select all existing content
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      // Insert new text
       document.execCommand("insertText", false, text);
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text }));
     }
   }
 
-  function clearTextarea(el) {
-    if (!el) return;
-    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, "value"
-      )?.set;
-      if (nativeSetter) nativeSetter.call(el, "");
-      else el.value = "";
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    } else {
-      el.focus();
-      document.execCommand("selectAll", false, null);
-      document.execCommand("delete", false, null);
-    }
-  }
-
-  function triggerSend() {
+  function triggerSend(ta) {
+    // First try the send button
     const btn = document.querySelector(config.sendBtn);
     if (btn && !btn.disabled) {
       btn.click();
       return;
     }
-    const ta = document.querySelector(config.textarea);
+    // Fallback: simulate Enter on the textarea
     if (ta) {
       ta.dispatchEvent(new KeyboardEvent("keydown", {
         key: "Enter", code: "Enter", keyCode: 13,
-        bubbles: true, cancelable: true, composed: true
+        bubbles: true, cancelable: true, composed: true,
+        shiftKey: false,
+      }));
+      ta.dispatchEvent(new KeyboardEvent("keyup", {
+        key: "Enter", code: "Enter", keyCode: 13,
+        bubbles: true, composed: true,
       }));
     }
   }
 
   // ── RESET ─────────────────────────────────────────────
+
   function resetInterceptor() {
     interceptActive = false;
     lastText        = "";
   }
 
   // ── INTERCEPT ─────────────────────────────────────────
+
   async function interceptPrompt(text, ta) {
     if (interceptActive || !text) return;
 
@@ -85,7 +108,8 @@
     if (!settings.autoScan) return;
 
     interceptActive = true;
-    lastText = text;
+    lastText        = text;
+
     clearTextarea(ta);
 
     chrome.runtime.sendMessage({
@@ -96,6 +120,7 @@
   }
 
   // ── EVENT HANDLERS ────────────────────────────────────
+
   function handleKeydown(e) {
     if (e.key !== "Enter" || e.shiftKey || interceptActive) return;
     const ta = document.querySelector(config.textarea);
@@ -119,33 +144,29 @@
   }
 
   // ── ATTACH LISTENERS ──────────────────────────────────
-  // Always detach from old elements and re-attach to current ones
+
   function attachListeners() {
     const ta  = document.querySelector(config.textarea);
     const btn = document.querySelector(config.sendBtn);
 
-    // Detach from old textarea if it changed
     if (attachedTA && attachedTA !== ta) {
       attachedTA.removeEventListener("keydown", handleKeydown, true);
-      attachedTA.dataset.psAttached = "";
+      delete attachedTA.dataset.psAttached;
       attachedTA = null;
     }
 
-    // Detach from old button if it changed
     if (attachedBtn && attachedBtn !== btn) {
       attachedBtn.removeEventListener("click", handleSendClick, true);
-      attachedBtn.dataset.psAttached = "";
+      delete attachedBtn.dataset.psAttached;
       attachedBtn = null;
     }
 
-    // Attach to new textarea
     if (ta && !ta.dataset.psAttached) {
       ta.addEventListener("keydown", handleKeydown, true);
       ta.dataset.psAttached = "true";
       attachedTA = ta;
     }
 
-    // Attach to new button
     if (btn && !btn.dataset.psAttached) {
       btn.addEventListener("click", handleSendClick, true);
       btn.dataset.psAttached = "true";
@@ -154,20 +175,13 @@
   }
 
   // ── MUTATION OBSERVER ─────────────────────────────────
-  // Watch for DOM changes (SPA navigation, new chat, etc.)
+
   const observer = new MutationObserver(() => {
     attachListeners();
-
-    // If interceptActive but textarea is now empty and has new content
-    // it means the LLM responded and chat moved on — reset
     if (interceptActive) {
-      const ta = document.querySelector(config.textarea);
-      if (ta && getTextareaText(ta) === "" && lastText) {
-        // Check if response appeared (chat updated) — reset after delay
-        setTimeout(() => {
-          if (interceptActive) resetInterceptor();
-        }, 3000);
-      }
+      setTimeout(() => {
+        if (interceptActive) resetInterceptor();
+      }, 5000);
     }
   });
 
@@ -175,28 +189,51 @@
   attachListeners();
 
   // ── MESSAGE LISTENER ──────────────────────────────────
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type !== "SEND_DECISION") return;
 
-    const ta = document.querySelector(config.textarea);
-
     if (msg.decision === "cancel") {
+      resetInterceptor();
+      // Restore original text so user can edit it
+      const ta = document.querySelector(config.textarea);
+      if (ta && lastText) setTextareaText(ta, lastText);
       resetInterceptor();
       return;
     }
 
-    const textToSend = msg.decision === "rewritten" ? msg.rewrittenText : lastText;
+    const textToSend = msg.decision === "rewritten"
+      ? msg.rewrittenText
+      : msg.originalText || lastText;
 
-    resetInterceptor();
+    if (!textToSend) {
+      resetInterceptor();
+      return;
+    }
 
-    if (!textToSend) return;
+    const ta = document.querySelector(config.textarea);
 
+    // Step 1: set text into textarea
     setTextareaText(ta, textToSend);
+
+    // Step 2: wait for React/framework to register the new value
     setTimeout(() => {
-      triggerSend();
-      // Re-attach listeners after send in case DOM updates
-      setTimeout(() => attachListeners(), 500);
-    }, 300);
+      // Step 3: verify text is there before sending
+      const currentText = getTextareaText(ta);
+      if (currentText) {
+        triggerSend(ta);
+      } else {
+        // Text didn't stick — try again
+        setTextareaText(ta, textToSend);
+        setTimeout(() => triggerSend(ta), 300);
+      }
+
+      // Step 4: reset after send
+      setTimeout(() => {
+        resetInterceptor();
+        attachListeners();
+      }, 500);
+    }, 400);
   });
 
 })();
