@@ -63,7 +63,7 @@ async function handleScan(text, hostname, tabId) {
       }
     }
 
-    await chrome.action.openPopup();
+    //await chrome.action.openPopup();
 
   } catch (err) {
     console.error("PromptScanner scan error:", err);
