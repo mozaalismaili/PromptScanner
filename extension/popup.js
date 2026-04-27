@@ -1,21 +1,20 @@
-// ── STRINGS ───────────────────────────────────────────────
 const STRINGS = {
   ar: {
     tagline:        "فحص الخصوصية والسلامة",
-    scanning:       "جار الفحص…",
-    rewriting:      "جار إعادة الصياغة...",
+    scanning:       "جارٍ الفحص…",
+    rewriting:      "جارٍ إعادة الصياغة بواسطة Qwen…",
     scannedIn:      "تم الفحص في",
     noPii:          "✓ لا توجد معلومات شخصية",
     toxUnavailable: "نموذج السمية غير متاح",
     confidence:     "درجة الثقة",
-    lMasked:        "◆ النص الأمن",
+    lMasked:        "◆ النص المُقنَّع",
     lTox:           "◆ تحليل السمية",
     lKeywords:      "◆ الكلمات المؤثرة",
     lRewritten:     "◆ النص المُعاد كتابته",
     btnRewrite:     "✦ إعادة الصياغة",
     btnCancel:      "✕ إلغاء",
     btnSendOrig:    "⟶ إرسال الأصلي",
-    btnSendMasked:  "⟶ إرسال الأمر المحمي",
+    btnSendMasked:  "⟶ إرسال المُقنَّع",
     btnSendNew:     "⟶ إرسال المُعاد كتابته",
     btnSendAnyway:  "⟶ إرسال على أي حال",
     btnSend:        "⟶ إرسال",
@@ -35,7 +34,7 @@ const STRINGS = {
     sDescAutoScan:  "فحص المحتوى عند الضغط على إرسال أو Enter",
     toxLabels: {
       "Normal":            "عادي",
-      "Mild Offense":      "مسيء بشكل بسيط",
+      "Mild Offense":      "مسيء بشكل خفيف",
       "Offensive":         "مسيء",
       "Privacy Violation": "انتهاك الخصوصية",
       "Obscene":           "محتوى فاضح",
@@ -61,7 +60,7 @@ const STRINGS = {
   en: {
     tagline:        "Privacy & Safety Scanner",
     scanning:       "Scanning…",
-    rewriting:      "Rewriting…",
+    rewriting:      "Rewriting with Qwen…",
     scannedIn:      "Scanned in",
     noPii:          "✓ No personal information found",
     toxUnavailable: "Toxicity model unavailable",
@@ -101,13 +100,13 @@ const STRINGS = {
       "Mental Health":     "Mental Health",
     },
     toxBadges: {
-      "Normal":            { text: "Safe",    cls: "badge-safe" },
-      "Mild Offense":      { text: "Warning", cls: "badge-warn" },
-      "Offensive":         { text: "Warning", cls: "badge-warn" },
-      "Privacy Violation": { text: "Warning", cls: "badge-warn" },
-      "Obscene":           { text: "Flagged", cls: "badge-flag" },
-      "Dangerous":         { text: "Flagged", cls: "badge-flag" },
-      "Mental Health":     { text: "Critical",cls: "badge-crit" },
+      "Normal":            { text: "Safe",     cls: "badge-safe" },
+      "Mild Offense":      { text: "Warning",  cls: "badge-warn" },
+      "Offensive":         { text: "Warning",  cls: "badge-warn" },
+      "Privacy Violation": { text: "Warning",  cls: "badge-warn" },
+      "Obscene":           { text: "Flagged",  cls: "badge-flag" },
+      "Dangerous":         { text: "Flagged",  cls: "badge-flag" },
+      "Mental Health":     { text: "Critical", cls: "badge-crit" },
     },
     piiLabels: {
       "PERS": "Person", "ORG": "Organization", "ADDRESS": "Address",
@@ -139,17 +138,17 @@ function hide(id) { document.getElementById(id)?.classList.add("hidden"); }
 function el(id)   { return document.getElementById(id); }
 function setText(id, text) { const e = el(id); if (e) e.textContent = text; }
 
-// ── SCENARIO DETECTION ────────────────────────────────────
+// ── SCENARIO ──────────────────────────────────────────────
 function getScenario(result) {
   const hasPii = result.pii && result.pii.length > 0;
   const tox    = result.tox?.prediction;
   const isTox  = tox && tox !== "Normal";
-  if (isTox)  return "toxic";   // toxic (with or without PII)
-  if (hasPii) return "pii";     // PII only, no toxicity
-  return "safe";                // everything clean
+  if (isTox)  return "toxic";
+  if (hasPii) return "pii";
+  return "safe";
 }
 
-// ── SEND DECISION ─────────────────────────────────────────
+// ── SEND ──────────────────────────────────────────────────
 function sendDecision(decision) {
   chrome.runtime.sendMessage({
     type:          "SEND_DECISION",
@@ -170,37 +169,36 @@ function applyLanguage(lang) {
   document.documentElement.dir  = isRtl ? "rtl" : "ltr";
   document.body.style.direction  = isRtl ? "rtl" : "ltr";
 
-  setText("h-tagline",          S.tagline);
-  setText("t-scanning",         S.scanning);
-  setText("t-rewriting",        S.rewriting);
-  setText("l-masked",           S.lMasked);
-  setText("l-tox",              S.lTox);
-  setText("l-keywords",         S.lKeywords);
-  setText("l-rewritten",        S.lRewritten);
-  setText("btn-rewrite",        S.btnRewrite);
-  setText("btn-cancel",         S.btnCancel);
-  setText("btn-cancel-pii",     S.btnCancel);
-  setText("btn-cancel-tox",     S.btnCancel);
-  setText("btn-cancel-safe",    S.btnCancel);
-  setText("btn-cancel-error",   S.btnCancel);
-  setText("btn-send-masked",    S.btnSendMasked);
-  setText("btn-send-orig-pii",  S.btnSendOrig);
-  setText("btn-send-orig-tox",  S.btnSendOrig);
-  setText("btn-send-rewritten", S.btnSendNew);
-  setText("btn-send-safe",      S.btnSend);
-  setText("btn-send-anyway",    S.btnSendAnyway);
-  setText("btn-save-settings",  S.btnSave);
-  setText("saved-msg",          S.saved);
-  setText("s-title-appearance", S.sTitleAppear);
-  setText("s-title-behavior",   S.sTitleBehavior);
-  setText("s-label-dark",       S.sLabelDark);
-  setText("s-desc-dark",        S.sDescDark);
-  setText("s-label-lang",       S.sLabelLang);
-  setText("s-desc-lang",        S.sDescLang);
-  setText("s-label-showSafe",   S.sLabelShowSafe);
-  setText("s-desc-showSafe",    S.sDescShowSafe);
-  setText("s-label-autoScan",   S.sLabelAutoScan);
-  setText("s-desc-autoScan",    S.sDescAutoScan);
+  setText("h-tagline",           S.tagline);
+  setText("t-scanning",          S.scanning);
+  setText("t-rewriting",         S.rewriting);
+  setText("l-masked",            S.lMasked);
+  setText("l-tox",               S.lTox);
+  setText("l-keywords",          S.lKeywords);
+  setText("l-rewritten",         S.lRewritten);
+  setText("btn-rewrite",         S.btnRewrite);
+  setText("btn-cancel-pii",      S.btnCancel);
+  setText("btn-cancel-tox",      S.btnCancel);
+  setText("btn-cancel-safe",     S.btnCancel);
+  setText("btn-cancel-error",    S.btnCancel);
+  setText("btn-send-masked",     S.btnSendMasked);
+  setText("btn-send-orig-pii",   S.btnSendOrig);
+  setText("btn-send-orig-tox",   S.btnSendOrig);
+  setText("btn-send-rewritten",  S.btnSendNew);
+  setText("btn-send-safe",       S.btnSend);
+  setText("btn-send-anyway",     S.btnSendAnyway);
+  setText("btn-save-settings",   S.btnSave);
+  setText("saved-msg",           S.saved);
+  setText("s-title-appearance",  S.sTitleAppear);
+  setText("s-title-behavior",    S.sTitleBehavior);
+  setText("s-label-dark",        S.sLabelDark);
+  setText("s-desc-dark",         S.sDescDark);
+  setText("s-label-lang",        S.sLabelLang);
+  setText("s-desc-lang",         S.sDescLang);
+  setText("s-label-showSafe",    S.sLabelShowSafe);
+  setText("s-desc-showSafe",     S.sDescShowSafe);
+  setText("s-label-autoScan",    S.sLabelAutoScan);
+  setText("s-desc-autoScan",     S.sDescAutoScan);
 
   document.querySelectorAll(".lang-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.lang === lang);
@@ -216,7 +214,6 @@ function applyDarkMode(enabled) {
 // ── SETTINGS ─────────────────────────────────────────────
 async function loadSettings() {
   userSettings = await chrome.storage.sync.get(DEFAULTS);
-  S = STRINGS[userSettings.language] || STRINGS.ar;
   applyDarkMode(userSettings.darkMode);
   applyLanguage(userSettings.language);
   el("s-darkMode").checked = userSettings.darkMode;
@@ -304,7 +301,7 @@ function renderResult(result) {
     maskedBox.innerHTML = `<span class="no-pii">${S.noPii}</span>`;
   }
 
-  // Toxicity card
+  // Toxicity
   const tox = result.tox;
   if (tox) {
     const label = S.toxLabels[tox.prediction] || tox.prediction;
@@ -328,15 +325,11 @@ function renderResult(result) {
     el("tox-card").innerHTML = `<div class="no-pii">${S.toxUnavailable}</div>`;
   }
 
-  // Show correct action buttons based on scenario
+  // Show correct buttons
   const scenario = getScenario(result);
-  if (scenario === "pii") {
-    show("actions-pii");
-  } else if (scenario === "toxic") {
-    show("actions-tox");
-  } else {
-    show("actions-safe");
-  }
+  if      (scenario === "pii")   show("actions-pii");
+  else if (scenario === "toxic") show("actions-tox");
+  else                           show("actions-safe");
 }
 
 function renderError(msg) {
@@ -345,7 +338,7 @@ function renderError(msg) {
   el("error-msg").textContent = msg || S.errorConn;
 }
 
-// ── INIT ──────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────
 async function init() {
   await loadSettings();
 
@@ -364,12 +357,7 @@ async function init() {
   if (data.scanResult) {
     currentResult = data.scanResult;
     currentMasked = data.scanResult.masked_text || "";
-
-    const scenario = getScenario(currentResult);
-    if (scenario === "safe" && !userSettings.showSafe) {
-      sendDecision("original");
-      return;
-    }
+    // Always render — never auto-send from popup
     renderResult(currentResult);
   } else {
     show("loading-view");
@@ -377,13 +365,12 @@ async function init() {
 }
 
 // ── BUTTON LISTENERS ──────────────────────────────────────
-
-// Scenario A — PII only
+// PII scenario
 el("btn-send-masked")?.addEventListener("click",   () => sendDecision("masked"));
 el("btn-send-orig-pii")?.addEventListener("click", () => sendDecision("original"));
 el("btn-cancel-pii")?.addEventListener("click",    () => sendDecision("cancel"));
 
-// Scenario B — Toxic
+// Toxic scenario
 el("btn-rewrite")?.addEventListener("click", () => {
   if (!currentResult || !currentOriginal) return;
   const tox_label = currentResult.tox?.prediction || "Offensive";
@@ -403,7 +390,7 @@ el("btn-send-rewritten")?.addEventListener("click", () => {
 el("btn-send-orig-tox")?.addEventListener("click", () => sendDecision("original"));
 el("btn-cancel-tox")?.addEventListener("click",    () => sendDecision("cancel"));
 
-// Scenario C — Safe
+// Safe scenario
 el("btn-send-safe")?.addEventListener("click",   () => sendDecision("original"));
 el("btn-cancel-safe")?.addEventListener("click", () => sendDecision("cancel"));
 

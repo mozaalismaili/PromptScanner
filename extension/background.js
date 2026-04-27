@@ -42,16 +42,42 @@ async function handleScan(text, hostname, tabId) {
     if (!response.ok) throw new Error(`API error: ${response.status}`);
     const result = await response.json();
 
+    const hasPii   = result.pii && result.pii.length > 0;
+    const tox      = result.tox?.prediction;
+    const isNormal = !tox || tox === "Normal";
+    const isSafe   = !hasPii && isNormal;
+
+    // Check user setting
+    const settings = await chrome.storage.sync.get({ showSafe: false });
+
+    if (isSafe && !settings.showSafe) {
+      // Safe content + user doesn't want popup → send directly, no popup
+      if (tabId) {
+        chrome.action.setBadgeText({ text: "OK", tabId });
+        chrome.action.setBadgeBackgroundColor({ color: "#00C9A7", tabId });
+      }
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, {
+          type:          "SEND_DECISION",
+          decision:      "original",
+          originalText:  text,
+          maskedText:    "",
+          rewrittenText: "",
+        });
+      }
+      // Clear any old scan data
+      await chrome.storage.session.remove(["scanResult", "scanError", "originalText", "tabId"]);
+      return;
+    }
+
+    // Not safe OR user wants popup → store result and show badge
     await chrome.storage.session.set({
       scanResult:   result,
       originalText: text,
       tabId:        tabId,
       hostname:     hostname,
+      scanError:    null,
     });
-
-    const hasPii   = result.pii && result.pii.length > 0;
-    const tox      = result.tox?.prediction;
-    const isNormal = !tox || tox === "Normal";
 
     if (tabId) {
       if (hasPii || !isNormal) {
@@ -63,9 +89,6 @@ async function handleScan(text, hostname, tabId) {
       }
     }
 
-    chrome.action.setBadgeText({ text: "!", tabId });
-
-
   } catch (err) {
     console.error("PromptScanner scan error:", err);
     if (tabId) {
@@ -76,8 +99,8 @@ async function handleScan(text, hostname, tabId) {
       scanError:    err.message,
       originalText: text,
       tabId:        tabId,
+      scanResult:   null,
     });
-    chrome.action.setBadgeText({ text: "!", tabId });
   }
 }
 
