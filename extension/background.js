@@ -63,7 +63,7 @@ async function handleScan(text, hostname, tabId) {
       }
     }
 
-    await chrome.action.openPopup();
+    chrome.action.setBadgeText({ text: "!", tabId });
 
 
   } catch (err) {
@@ -77,7 +77,7 @@ async function handleScan(text, hostname, tabId) {
       originalText: text,
       tabId:        tabId,
     });
-    await chrome.action.openPopup();
+    chrome.action.setBadgeText({ text: "!", tabId });
   }
 }
 
