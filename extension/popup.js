@@ -22,8 +22,6 @@ const STRINGS = {
     saved:          "تم الحفظ بنجاح",
     rewriteFail:    "فشل في إعادة الصياغة. حاول مرة أخرى.",
     errorConn:      "حدث خطأ في الاتصال بالخادم.",
-    simScore:       "درجة التشابه الدلالي",
-    attempts:       "محاولات",
     sTitleAppear:   "◆ المظهر",
     sTitleBehavior: "◆ السلوك",
     sLabelDark:     "الوضع الداكن",
@@ -82,8 +80,6 @@ const STRINGS = {
     saved:          "Settings saved!",
     rewriteFail:    "Rewrite failed. Please try again.",
     errorConn:      "Failed to connect to server.",
-    simScore:       "Semantic similarity",
-    attempts:       "attempts",
     sTitleAppear:   "◆ Appearance",
     sTitleBehavior: "◆ Behavior",
     sLabelDark:     "Dark Mode",
@@ -408,22 +404,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     hide("rewrite-loading");
     rewrittenText = msg.rewritten;
     el("rewrite-box").textContent = msg.rewritten;
-
-    // Show similarity score
-    const scoreEl = el("similarity-score");
-    if (scoreEl && msg.similarity_score !== undefined) {
-      const score   = msg.similarity_score;
-      const passed  = msg.passed !== false;
-      const pct     = (score * 100).toFixed(0);
-      const color   = passed ? "var(--teal)" : "var(--orange)";
-      const icon    = passed ? "✓" : "⚠";
-      const attempts = msg.attempts > 1 ? ` (${msg.attempts} ${S.attempts || "attempts"})` : "";
-      scoreEl.innerHTML = `<span style="color:${color};font-family:'JetBrains Mono',monospace;font-size:10px;">
-        ${icon} ${S.simScore || "Semantic similarity"}: ${pct}%${attempts}
-      </span>`;
-      show("similarity-score");
-    }
-
     show("rewrite-section");
     show("btn-send-rewritten");
   }

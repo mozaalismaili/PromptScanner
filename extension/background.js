@@ -128,11 +128,8 @@ async function handleRewrite(text, masked_text, tox_label, tabId) {
     const result = await response.json();
 
     chrome.runtime.sendMessage({
-      type:             "REWRITE_RESULT",
-      rewritten:        result.rewritten,
-      similarity_score: result.similarity_score,
-      attempts:         result.attempts,
-      passed:           result.passed,
+      type:      "REWRITE_RESULT",
+      rewritten: result.rewritten,
     });
 
   } catch (err) {
