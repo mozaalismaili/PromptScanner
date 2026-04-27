@@ -47,30 +47,31 @@ async function handleScan(text, hostname, tabId) {
     const isNormal = !tox || tox === "Normal";
     const isSafe   = !hasPii && isNormal;
 
-    // Check user setting
+    // Get user setting
     const settings = await chrome.storage.sync.get({ showSafe: false });
 
     if (isSafe && !settings.showSafe) {
-      // Safe content + user doesn't want popup → send directly, no popup
+      // Safe + user doesn't want popup → send directly
       if (tabId) {
         chrome.action.setBadgeText({ text: "OK", tabId });
         chrome.action.setBadgeBackgroundColor({ color: "#00C9A7", tabId });
+        // Clear badge after 2 seconds
+        setTimeout(() => {
+          chrome.action.setBadgeText({ text: "", tabId });
+        }, 2000);
       }
-      if (tabId) {
-        chrome.tabs.sendMessage(tabId, {
-          type:          "SEND_DECISION",
-          decision:      "original",
-          originalText:  text,
-          maskedText:    "",
-          rewrittenText: "",
-        });
-      }
-      // Clear any old scan data
+      chrome.tabs.sendMessage(tabId, {
+        type:          "SEND_DECISION",
+        decision:      "original",
+        originalText:  text,
+        maskedText:    "",
+        rewrittenText: "",
+      });
       await chrome.storage.session.remove(["scanResult", "scanError", "originalText", "tabId"]);
       return;
     }
 
-    // Not safe OR user wants popup → store result and show badge
+    // Not safe OR user wants popup → store and open popup
     await chrome.storage.session.set({
       scanResult:   result,
       originalText: text,
@@ -89,6 +90,14 @@ async function handleScan(text, hostname, tabId) {
       }
     }
 
+    // Try to open popup automatically
+    try {
+      await chrome.action.openPopup();
+    } catch (e) {
+      // openPopup() failed (Chrome restriction) — badge stays, user clicks manually
+      console.log("PromptScanner: click the extension icon to see results");
+    }
+
   } catch (err) {
     console.error("PromptScanner scan error:", err);
     if (tabId) {
@@ -101,6 +110,9 @@ async function handleScan(text, hostname, tabId) {
       tabId:        tabId,
       scanResult:   null,
     });
+    try {
+      await chrome.action.openPopup();
+    } catch (e) {}
   }
 }
 
