@@ -64,6 +64,8 @@ async function handleScan(text, hostname, tabId) {
     }
 
     //await chrome.action.openPopup();
+    console.log("Status:", response.status);
+    console.log("Error:", err);
 
   } catch (err) {
     console.error("PromptScanner scan error:", err);
