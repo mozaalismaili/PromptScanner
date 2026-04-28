@@ -14,7 +14,7 @@ const STRINGS = {
     btnRewrite:     "✦ إعادة الصياغة",
     btnCancel:      "✕ إلغاء",
     btnSendOrig:    "⟶ إرسال الأصلي",
-    btnSendMasked:  "⟶ إرسال المُقنَّع",
+    btnSendMasked:  "⟶ إرسال الأمر بدون معلومات خاصة",
     btnSendNew:     "⟶ إرسال المُعاد كتابته",
     btnSendAnyway:  "⟶ إرسال على أي حال",
     btnSend:        "⟶ إرسال",
