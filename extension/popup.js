@@ -2,12 +2,12 @@ const STRINGS = {
   ar: {
     tagline:        "فحص الخصوصية والسلامة",
     scanning:       "جارٍ الفحص…",
-    rewriting:      "جارٍ إعادة الصياغة بواسطة Qwen…",
+    rewriting:      "جارٍ إعادة الصياغة ...",
     scannedIn:      "تم الفحص في",
     noPii:          "✓ لا توجد معلومات شخصية",
     toxUnavailable: "نموذج السمية غير متاح",
     confidence:     "درجة الثقة",
-    lMasked:        "◆ النص المُقنَّع",
+    lMasked: "◆ النص بدون معلومات خاصة",
     lTox:           "◆ تحليل السمية",
     lKeywords:      "◆ الكلمات المؤثرة",
     lRewritten:     "◆ النص المُعاد كتابته",
@@ -39,7 +39,7 @@ const STRINGS = {
       "Privacy Violation": "انتهاك الخصوصية",
       "Obscene":           "محتوى فاضح",
       "Dangerous":         "خطير",
-      "Mental Health":     "صحة نفسية",
+     "Mental Health": "محتوى نفسي",
     },
     toxBadges: {
       "Normal":            { text: "آمن",    cls: "badge-safe" },
@@ -60,7 +60,7 @@ const STRINGS = {
   en: {
     tagline:        "Privacy & Safety Scanner",
     scanning:       "Scanning…",
-    rewriting:      "Rewriting with Qwen…",
+    rewriting:      "Rewriting Prompt…",
     scannedIn:      "Scanned in",
     noPii:          "✓ No personal information found",
     toxUnavailable: "Toxicity model unavailable",
