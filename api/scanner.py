@@ -58,6 +58,8 @@ MODELS_DIR = Path("models")
 
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
+LATIN_OR_DIGIT = re.compile(r'[a-zA-Z0-9]')
+
 # ─────────────────────────────────────────────────────────────
 # MODEL DOWNLOAD
 # ─────────────────────────────────────────────────────────────
@@ -108,6 +110,25 @@ def regex_detect(text):
         if it['char_start'] >= last_end:
             filtered.append(it)
             last_end = it['char_end']
+    return filtered
+
+# ─────────────────────────────────────────────────────────────
+# ID / CREDENTIAL POST-FILTER
+# ─────────────────────────────────────────────────────────────
+def _is_valid_id_or_credential(value: str) -> bool:
+    """Return True only if value could plausibly be an ID or credential."""
+    if not value or len(value.strip()) < 2:
+        return False
+    return bool(LATIN_OR_DIGIT.search(value))
+ 
+def _filter_entities(entities: list) -> list:
+    """Remove ID/CREDENTIAL detections that are provably wrong."""
+    filtered = []
+    for e in entities:
+        if e['type'] in ('ID', 'CREDENTIAL'):
+            if not _is_valid_id_or_credential(e['value']):
+                continue
+        filtered.append(e)
     return filtered
 
 # ─────────────────────────────────────────────────────────────
@@ -311,7 +332,7 @@ def hybrid_detect(text, ar_tok, ar_mdl, ar_id2tag, xl_tok, xl_mdl, xl_id2tag):
         except Exception as e:
             print("XLM-R inference error:", e)
 
-    return all_ents
+    return _filter_entities(all_ents)
 
 # ─────────────────────────────────────────────────────────────
 # TOXICITY PREDICTION
