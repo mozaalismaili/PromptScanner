@@ -42,7 +42,14 @@ async function handleScan(text, hostname, tabId) {
       body:    JSON.stringify({ text }),
     });
 
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
+if (!response.ok) {
+  let detail = `API error: ${response.status}`;
+  try {
+    const errBody = await response.json();
+    if (errBody.detail) detail = errBody.detail;
+  } catch (e) {}
+  throw new Error(detail);
+}    
     const result = await response.json();
 
     const hasPii   = result.pii && result.pii.length > 0;

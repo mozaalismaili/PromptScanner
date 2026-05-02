@@ -32,6 +32,7 @@ const STRINGS = {
     sDescShowSafe:  "إذا كان المحتوى آمناً، اعرض النافذة. وإلا أرسل تلقائياً",
     sLabelAutoScan: "الفحص التلقائي",
     sDescAutoScan:  "فحص المحتوى عند الضغط على إرسال أو Enter",
+    errorEnglish: "يُرجى كتابة النص بالعربية فقط",
     toxLabels: {
       "Normal":            "عادي",
       "Mild Offense":      "مسيء بشكل خفيف",
@@ -90,6 +91,7 @@ const STRINGS = {
     sDescShowSafe:  "If content is safe, show popup. Otherwise send automatically",
     sLabelAutoScan: "Auto Scan",
     sDescAutoScan:  "Scan content when Send or Enter is pressed",
+    errorEnglish: "Please write your prompt in Arabic only.",
     toxLabels: {
       "Normal":            "Normal",
       "Mild Offense":      "Mild Offense",
@@ -335,9 +337,9 @@ function renderResult(result) {
 function renderError(msg) {
   hide("loading-view"); hide("result-view");
   show("error-view");
-  el("error-msg").textContent = msg || S.errorConn;
+  const friendly = msg && msg.includes("Arabic") ? S.errorEnglish : (msg || S.errorConn);
+  el("error-msg").textContent = friendly;
 }
-
 // ── INIT ──────────────────────────────────────────────────
 async function init() {
   await loadSettings();
