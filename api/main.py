@@ -138,6 +138,10 @@ def health():
 def scan(req: ScanRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
+    arabic_chars = len(re.findall(r'[\u0600-\u06FF]', req.text))
+    total_chars  = len([c for c in req.text if c.strip()])
+    if total_chars > 0 and arabic_chars / total_chars < 0.3:
+        raise HTTPException(status_code=422, detail="Prompt must contain Arabic text.")
 
     t0  = time.time()
     res = run_scan(
@@ -168,11 +172,13 @@ def scan(req: ScanRequest):
             "color":      TOX_COLOR.get(tox_res["prediction"], "#00c9a7"),
         }
 
+    token_count = len(req.text.split())
     return {
         "pii":         pii_out,
         "tox":         tox_out,
         "masked_text": res.get("masked_text", req.text),
         "elapsed":     elapsed,
+        "truncated":   token_count > 100,
     }
 
 

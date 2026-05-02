@@ -1,6 +1,7 @@
 const API_URL = "https://promptscanner-production.up.railway.app";
 
 let currentTabId = null;
+let isScanning   = false;
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg.type === "SCAN_PROMPT") {
@@ -27,6 +28,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 });
 
 async function handleScan(text, hostname, tabId) {
+  if (isScanning) return;
+  isScanning = true;
   try {
     if (tabId) {
       chrome.action.setBadgeText({ text: "...", tabId });
@@ -113,6 +116,8 @@ async function handleScan(text, hostname, tabId) {
     try {
       await chrome.action.openPopup();
     } catch (e) {}
+  } finally {
+    isScanning = false;
   }
 }
 
