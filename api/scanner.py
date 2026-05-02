@@ -249,26 +249,80 @@ def _token_overlaps_regex(tok_s, tok_e, tok_char, regex_spans):
     ce = tok_char.get(tok_e - 1, tok_char[tok_s])[1]
     return any(not (ce <= rs or cs >= re_) for rs, re_ in regex_spans)
 
+CHUNK_SIZE    = 200  # tokens per chunk
+CHUNK_OVERLAP = 30   # overlap to catch boundary entities
+
 def _predict_ner(text, tokenizer, model, id2tag):
     tokens = text.split()
-    if not tokens:
-        return []
-    inputs = tokenizer(
-        tokens, is_split_into_words=True, return_tensors="pt",
-        truncation=True, max_length=512, return_offsets_mapping=False
-    )
-    with torch.no_grad():
-        logits = model(**{k: v for k, v in inputs.items()
-                          if k in ['input_ids','attention_mask','token_type_ids']}).logits
-    preds      = torch.argmax(logits, dim=2).squeeze().tolist()
-    word_ids   = inputs.word_ids(batch_index=0)
-    word_preds = {}
-    for idx, wid in enumerate(word_ids):
-        if wid is None:
-            continue
-        if wid not in word_preds:
-            word_preds[wid] = id2tag.get(preds[idx], 'O')
-    return [word_preds.get(i, 'O') for i in range(len(tokens))]
+    if not tokens: return []
+
+    # Build overlapping chunks
+    chunks = []
+    start  = 0
+    while start < len(tokens):
+        end = min(start + CHUNK_SIZE, len(tokens))
+        chunks.append((start, tokens[start:end]))
+        if end == len(tokens):
+            break
+        start += CHUNK_SIZE - CHUNK_OVERLAP
+
+    all_entities = []
+
+    for chunk_start, chunk_tokens in chunks:
+        inputs = tokenizer(
+            chunk_tokens, is_split_into_words=True, return_tensors="pt",
+            truncation=True, padding=True, max_length=256,
+        )
+        with torch.no_grad():
+            preds = torch.argmax(model(**inputs).logits, dim=2)[0].tolist()
+        word_ids  = inputs.word_ids(0)
+        word_pred = {}
+        for idx, wid in enumerate(word_ids):
+            if wid is not None and wid not in word_pred:
+                word_pred[wid] = id2tag.get(preds[idx], "O")
+
+        entities, cur, cur_toks = [], None, []
+        for i, tok in enumerate(chunk_tokens):
+            tag = word_pred.get(i, "O")
+            if tag.startswith("B-"):
+                if cur:
+                    entities.append({
+                        "value": " ".join(cur_toks),
+                        "type":  cur,
+                        "token_start": chunk_start + i - len(cur_toks),
+                        "token_end":   chunk_start + i,
+                    })
+                cur, cur_toks = tag[2:], [tok]
+            elif tag.startswith("I-") and cur == tag[2:]:
+                cur_toks.append(tok)
+            else:
+                if cur:
+                    entities.append({
+                        "value": " ".join(cur_toks),
+                        "type":  cur,
+                        "token_start": chunk_start + i - len(cur_toks),
+                        "token_end":   chunk_start + i,
+                    })
+                cur, cur_toks = None, []
+        if cur:
+            entities.append({
+                "value": " ".join(cur_toks),
+                "type":  cur,
+                "token_start": chunk_start + len(chunk_tokens) - len(cur_toks),
+                "token_end":   chunk_start + len(chunk_tokens),
+            })
+        all_entities.extend(entities)
+
+    # De-duplicate: remove same value+type detected in overlapping chunks
+    seen    = set()
+    unique  = []
+    for e in all_entities:
+        key = (e["value"].strip(), e["type"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(e)
+
+    return unique
 
 def _bio_to_spans(tokens, labels):
     spans, cur_label, cur_toks, cur_start = [], None, [], None
@@ -338,56 +392,86 @@ def hybrid_detect(text, ar_tok, ar_mdl, ar_id2tag, xl_tok, xl_mdl, xl_id2tag):
 # TOXICITY PREDICTION
 # ─────────────────────────────────────────────────────────────
 def predict_toxicity_with_attention(text, tokenizer, model):
-    enc  = tokenizer(text, return_tensors="pt", max_length=128,
-                     truncation=True)
-    ids  = enc["input_ids"]
-    mask = enc["attention_mask"]
-    tids = enc.get("token_type_ids", torch.zeros_like(ids))
+    processed = clean_arabic(text)
+    if not processed: return None
 
-    with torch.no_grad():
-        out   = model(ids, attention_mask=mask, token_type_ids=tids, output_attentions=True)
-        probs = F.softmax(out.logits, dim=1).squeeze().cpu().numpy()
+    # Split into word chunks of 100 words with 20 word overlap
+    words_all = processed.split()
+    CHUNK_W   = 100
+    OVERLAP_W = 20
 
-    attn   = torch.stack(out.attentions)[:, 0, :, 0, :].mean(dim=(0, 1)).cpu().numpy()
-    tokens = tokenizer.convert_ids_to_tokens(ids.squeeze().cpu().numpy())
-    actual_len = mask.sum().item()
-    tokens, attn = tokens[:actual_len], attn[:actual_len]
+    if len(words_all) <= CHUNK_W:
+        # Short enough — process as single chunk (original behavior)
+        chunks = [processed]
+    else:
+        chunks = []
+        start  = 0
+        while start < len(words_all):
+            end = min(start + CHUNK_W, len(words_all))
+            chunks.append(" ".join(words_all[start:end]))
+            if end == len(words_all): break
+            start += CHUNK_W - OVERLAP_W
 
-    words, scores, cur_w, cur_s = [], [], "", []
-    for tok, sc in zip(tokens, attn):
-        if tok in ["[CLS]", "[SEP]", "[PAD]", "<s>", "</s>", "<pad>"]:
-            continue
-        if tok.startswith("##"):
-            cur_w += tok[2:]; cur_s.append(sc)
-        elif tok.startswith("+"):
-            cur_w += tok.replace("+", ""); cur_s.append(sc)
-        else:
-            if cur_w:
-                words.append(cur_w); scores.append(float(max(cur_s)))
-            cur_w, cur_s = tok.replace("+", ""), [sc]
-    if cur_w:
-        words.append(cur_w); scores.append(float(max(cur_s)))
+    best_result = None
 
-    scores_arr = np.array(scores, dtype=float)
-    filtered   = np.array([0.0 if w in ARABIC_STOP_WORDS else s
-                            for w, s in zip(words, scores_arr)])
-    is_stop    = [w in ARABIC_STOP_WORDS for w in words]
-    if filtered.max() > 0:
-        filtered /= filtered.max()
+    for chunk_text in chunks:
+        enc  = tokenizer(chunk_text, max_length=128, padding="max_length",
+                         truncation=True, return_tensors="pt")
+        ids  = enc["input_ids"]
+        mask = enc["attention_mask"]
+        tids = enc.get("token_type_ids", torch.zeros_like(ids))
 
-    pred_idx   = int(np.argmax(probs))
-    pred_label = TOX_IDX2LABEL[pred_idx]
-    confidence = float(probs[pred_idx])
-    all_probs  = {TOX_IDX2LABEL[i]: float(p) for i, p in enumerate(probs)}
+        with torch.no_grad():
+            out   = model(ids, attention_mask=mask, token_type_ids=tids,
+                          output_attentions=True)
+            probs = F.softmax(out.logits, dim=1).squeeze().cpu().numpy()
 
-    return {
-        "prediction": pred_label,
-        "confidence": confidence,
-        "all_probs":  all_probs,
-        "words":      words,
-        "scores":     filtered.tolist(),
-        "is_stop":    is_stop,
-    }
+        pred_idx   = int(np.argmax(probs))
+        pred_label = TOX_IDX2LABEL[pred_idx]
+        confidence = float(probs[pred_idx])
+
+        # Keep the most harmful prediction across all chunks
+        SEVERITY = {
+            "Normal": 0, "Mild Offense": 1, "Offensive": 2,
+            "Privacy Violation": 2, "Obscene": 3,
+            "Mental Health": 3, "Dangerous": 4
+        }
+        if best_result is None or \
+           SEVERITY.get(pred_label, 0) > SEVERITY.get(best_result["prediction"], 0) or \
+           (pred_label == best_result["prediction"] and confidence > best_result["confidence"]):
+
+            # Extract attention for this chunk
+            attn   = torch.stack(out.attentions)[:, 0, :, 0, :].mean(dim=(0,1)).cpu().numpy()
+            tokens = tokenizer.convert_ids_to_tokens(ids.squeeze().cpu().numpy())
+            actual_len = mask.sum().item()
+            tokens, attn = tokens[:actual_len], attn[:actual_len]
+
+            words, scores, cur_w, cur_s = [], [], "", []
+            for tok, sc in zip(tokens, attn):
+                if tok in ["[CLS]","[SEP]","[PAD]","<s>","</s>","<pad>"]: continue
+                if tok.startswith("##"): cur_w += tok[2:]; cur_s.append(sc)
+                elif tok.startswith("+"): cur_w += tok.replace("+",""); cur_s.append(sc)
+                else:
+                    if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
+                    cur_w, cur_s = tok.replace("+",""), [sc]
+            if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
+
+            scores_arr = np.array(scores, dtype=float)
+            filtered   = np.array([0.0 if w in ARABIC_STOP_WORDS else s
+                                    for w, s in zip(words, scores_arr)])
+            is_stop    = [w in ARABIC_STOP_WORDS for w in words]
+            if filtered.max() > 0: filtered /= filtered.max()
+
+            best_result = {
+                "prediction": pred_label,
+                "confidence": confidence,
+                "all_probs":  {TOX_IDX2LABEL[i]: float(p) for i, p in enumerate(probs)},
+                "words":      words,
+                "scores":     filtered.tolist(),
+                "is_stop":    is_stop,
+            }
+
+    return best_result
 
 # ─────────────────────────────────────────────────────────────
 # MASKED TEXT BUILDER
