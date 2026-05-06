@@ -358,31 +358,25 @@ def hybrid_detect(text, ar_tok, ar_mdl, ar_id2tag, xl_tok, xl_mdl, xl_id2tag):
 
     if ar_mdl is not None:
         try:
-            ar_labels = _predict_ner(cleaned, ar_tok, ar_mdl, ar_id2tag)
-            for lbl, ts, te, toks in _bio_to_spans(tokens, ar_labels):
-                if lbl not in ARABERT_CATEGORIES:
+            for e in _predict_ner(cleaned, ar_tok, ar_mdl, ar_id2tag):
+                if e["type"] not in ARABERT_CATEGORIES:
                     continue
-                if _token_overlaps_regex(ts, te, tok_char, regex_spans):
+                if _token_overlaps_regex(e["token_start"], e["token_end"], tok_char, regex_spans):
                     continue
-                all_ents.append({
-                    'value': ' '.join(toks), 'type': lbl,
-                    'token_start': ts, 'token_end': te, 'source': 'arabert'
-                })
+                e["source"] = "arabert"
+                all_ents.append(e)
         except Exception as e:
             print("AraBERT inference error:", e)
 
     if xl_mdl is not None:
         try:
-            xl_labels = _predict_ner(cleaned, xl_tok, xl_mdl, xl_id2tag)
-            for lbl, ts, te, toks in _bio_to_spans(tokens, xl_labels):
-                if lbl not in XLMR_CATEGORIES:
+            for e in _predict_ner(cleaned, xl_tok, xl_mdl, xl_id2tag):
+                if e["type"] not in XLMR_CATEGORIES:
                     continue
-                if _token_overlaps_regex(ts, te, tok_char, regex_spans):
+                if _token_overlaps_regex(e["token_start"], e["token_end"], tok_char, regex_spans):
                     continue
-                all_ents.append({
-                    'value': ' '.join(toks), 'type': lbl,
-                    'token_start': ts, 'token_end': te, 'source': 'xlmr'
-                })
+                e["source"] = "xlmr"
+                all_ents.append(e)
         except Exception as e:
             print("XLM-R inference error:", e)
 
