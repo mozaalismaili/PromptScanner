@@ -139,10 +139,9 @@ def health():
 def scan(req: ScanRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
-    arabic_chars = len(re.findall(r'[\u0600-\u06FF]', req.text))
-    total_chars  = len([c for c in req.text if c.strip()])
-    if total_chars > 0 and arabic_chars / total_chars < 0.3:
-        raise HTTPException(status_code=422, detail="Prompt must contain Arabic text.")
+
+    # No language check — non-Arabic text passes through silently
+    # The models will simply find no Arabic PII and return Normal toxicity
 
     t0  = time.time()
     res = run_scan(
