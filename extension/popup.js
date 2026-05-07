@@ -270,24 +270,19 @@ function buildMaskedHtml(maskedText) {
   });
 }
 
-function hexToRgb(hex) {
-  hex = hex.replace("#", "");
-  return `${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)}`;
-}
-
-function buildHighlightHtml(words, scores, isStop, colorHex, piiValues) {
+function buildHighlightHtml(words, scores, isStop, colorHex) {
+  function hexToRgb(hex) {
+    hex = hex.replace("#", "");
+    return `${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)}`;
+  }
   const rgb = hexToRgb(colorHex);
   return words.map((word, i) => {
-    const score   = scores[i];
-    const cleaned = word.toLowerCase().replace(/[^\u0600-\u06FFa-z0-9]/g, "");
-    const isPii   = piiValues.has(cleaned);
-    const piiSt   = isPii ? "outline:2px solid #E8520A;outline-offset:2px;" : "";
-
-    if (isStop[i]) return `<span class="hl-word hl-stop" style="${piiSt}">${word}</span>`;
-    if (score > 0.7) return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});${piiSt}">${word}</span>`;
-    if (score > 0.4) return `<span class="hl-word hl-med"  style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};${piiSt}">${word}</span>`;
-    if (score > 0.1) return `<span class="hl-word hl-low"  style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});${piiSt}">${word}</span>`;
-    return `<span class="hl-word hl-dim" style="${piiSt}">${word}</span>`;
+    const score = scores[i];
+    if (isStop[i]) return `<span class="hl-word hl-stop">${word}</span>`;
+    if (score > 0.7) return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});">${word}</span>`;
+    if (score > 0.4) return `<span class="hl-word hl-med"  style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};">${word}</span>`;
+    if (score > 0.1) return `<span class="hl-word hl-low"  style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});">${word}</span>`;
+    return `<span class="hl-word hl-dim">${word}</span>`;
   }).join(" ");
 }
 
@@ -327,19 +322,7 @@ function renderResult(result) {
 
     // ── Keyword highlight with PII outline ────────────────
     if (tox.words?.length > 0) {
-      // Build set of PII word tokens for fast lookup
-      const piiValues = new Set();
-      if (result.pii && result.pii.length > 0) {
-        result.pii.forEach(e => {
-          e.value.split(/\s+/).forEach(w =>
-            piiValues.add(w.toLowerCase().replace(/[^\u0600-\u06FFa-z0-9]/g, ""))
-          );
-        });
-      }
-
-      el("hl-words").innerHTML = buildHighlightHtml(
-        tox.words, tox.scores, tox.is_stop, color, piiValues
-      );
+      el("hl-words").innerHTML = buildHighlightHtml(tox.words, tox.scores, tox.is_stop, color);
       show("hl-section");
     }
   } else {
