@@ -319,10 +319,30 @@ function renderResult(result) {
     el("pbar-fill").style.width           = `${conf}%`;
     el("pbar-fill").style.background      = color;
 
-    if (tox.words?.length > 0 && tox.prediction !== "Normal") {
-      el("hl-words").innerHTML = buildHighlightHtml(tox.words, tox.scores, tox.is_stop, color);
+    const hasToxWords = tox.words?.length > 0 && tox.prediction !== "Normal";
+    const hasPiiWords = result.pii && result.pii.length > 0;
+
+    if (hasToxWords || hasPiiWords) {
+      let hlHtml = "";
+
+      // PII entities always shown first with orange highlight
+      if (hasPiiWords) {
+        const piiHtml = result.pii.map(e => {
+          const label = S.piiLabels[e.type] || e.type;
+          return `<span class="hl-word hl-high" style="background:rgba(232,82,10,0.85);color:#fff;font-weight:700;" title="${label}">${e.value}</span>`;
+        }).join(" ");
+        hlHtml += `<div style="margin-bottom:6px;">${piiHtml}</div>`;
+      }
+
+      // Toxicity attention words
+      if (hasToxWords) {
+        hlHtml += buildHighlightHtml(tox.words, tox.scores, tox.is_stop, color);
+      }
+
+      el("hl-words").innerHTML = hlHtml;
       show("hl-section");
     }
+
   } else {
     el("tox-card").innerHTML = `<div class="no-pii">${S.toxUnavailable}</div>`;
   }
