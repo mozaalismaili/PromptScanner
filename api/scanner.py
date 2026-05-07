@@ -351,38 +351,27 @@ def predict_toxicity_with_attention(text, tokenizer, model):
     processed = clean_arabic(text)
     if not processed: return None
 
-    # Build original→cleaned word mapping for display
-    # so numbers/Latin tokens from original appear in the output
+    # Original words for display (preserves numbers, emails, Latin)
     orig_words    = text.split()
     cleaned_words = processed.split()
-
-    # Map each cleaned word back to its original counterpart
-    # by aligning tokens in order (cleaned has same count as Arabic words)
-    orig_map = {}  # cleaned_word_index -> original_word
-    ci = 0
-    for ow in orig_words:
-        cw = clean_arabic(ow)
-        if cw and ci < len(cleaned_words) and cleaned_words[ci] == cw:
-            orig_map[ci] = ow
-            ci += 1
 
     CHUNK_W   = 100
     OVERLAP_W = 20
 
     if len(cleaned_words) <= CHUNK_W:
-        chunks = [(0, processed)]
+        chunks = [(0, processed, orig_words[:len(cleaned_words)])]
     else:
         chunks = []
         start  = 0
         while start < len(cleaned_words):
             end = min(start + CHUNK_W, len(cleaned_words))
-            chunks.append((start, " ".join(cleaned_words[start:end])))
+            chunks.append((start, " ".join(cleaned_words[start:end]), orig_words[start:end]))
             if end == len(cleaned_words): break
             start += CHUNK_W - OVERLAP_W
 
     best_result = None
 
-    for chunk_offset, chunk_text in chunks:
+    for chunk_offset, chunk_text, chunk_orig_words in chunks:
         enc  = tokenizer(chunk_text, max_length=128, padding="max_length",
                          truncation=True, return_tensors="pt")
         ids  = enc["input_ids"]
@@ -412,36 +401,41 @@ def predict_toxicity_with_attention(text, tokenizer, model):
             actual_len = mask.sum().item()
             toks, attn = toks[:actual_len], attn[:actual_len]
 
-            # Reconstruct words from subword tokens
-            words, scores, cur_w, cur_s = [], [], "", []
+            # Reconstruct word-level scores from subword tokens
+            word_scores, cur_s = [], []
+            word_count = 0
             for tok, sc in zip(toks, attn):
                 if tok in ["[CLS]","[SEP]","[PAD]","<s>","</s>","<pad>"]: continue
-                if tok.startswith("##"): cur_w += tok[2:]; cur_s.append(sc)
-                elif tok.startswith("+"): cur_w += tok.replace("+",""); cur_s.append(sc)
+                if tok.startswith("##") or tok.startswith("+"):
+                    cur_s.append(sc)
                 else:
-                    if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
-                    cur_w, cur_s = tok.replace("+",""), [sc]
-            if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
+                    if cur_s:
+                        word_scores.append(float(max(cur_s)))
+                        word_count += 1
+                    cur_s = [sc]
+            if cur_s:
+                word_scores.append(float(max(cur_s)))
+                word_count += 1
 
-            # Map cleaned words back to original (restores numbers, Latin, etc.)
-            display_words = []
-            for i, w in enumerate(words):
-                global_idx = chunk_offset + i
-                # Try to find original word that cleans to this word
-                orig = orig_map.get(global_idx, w)
-                display_words.append(orig)
+            # Use original words for display (has numbers, Latin etc.)
+            # Align: cleaned_words and orig_words may differ in count
+            # so we use min length
+            n = min(len(word_scores), len(chunk_orig_words))
+            display_words = chunk_orig_words[:n]
+            word_scores   = word_scores[:n]
 
-            scores_arr = np.array(scores, dtype=float)
-            filtered   = np.array([0.0 if w in ARABIC_STOP_WORDS else s
-                                    for w, s in zip(words, scores_arr)])
-            is_stop    = [w in ARABIC_STOP_WORDS for w in words]
+            scores_arr = np.array(word_scores, dtype=float)
+            # Stop words based on cleaned version
+            chunk_clean_words = chunk_text.split()[:n]
+            is_stop = [w in ARABIC_STOP_WORDS for w in chunk_clean_words]
+            filtered = np.array([0.0 if is_stop[i] else s for i, s in enumerate(scores_arr)])
             if filtered.max() > 0: filtered /= filtered.max()
 
             best_result = {
                 "prediction": pred_label,
                 "confidence": confidence,
                 "all_probs":  {TOX_IDX2LABEL[i]: float(p) for i, p in enumerate(probs)},
-                "words":      display_words,   # original words with numbers/Latin preserved
+                "words":      display_words,
                 "scores":     filtered.tolist(),
                 "is_stop":    is_stop,
             }
