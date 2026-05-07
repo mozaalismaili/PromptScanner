@@ -7,7 +7,7 @@ const STRINGS = {
     noPii:          "✓ لا توجد معلومات شخصية",
     toxUnavailable: "نموذج السمية غير متاح",
     confidence:     "درجة الثقة",
-    lMasked: "◆ النص بدون معلومات خاصة",
+    lMasked:        "◆ النص بدون معلومات خاصة",
     lTox:           "◆ تحليل السمية",
     lKeywords:      "◆ الكلمات المؤثرة",
     lRewritten:     "◆ النص المُعاد كتابته",
@@ -32,7 +32,7 @@ const STRINGS = {
     sDescShowSafe:  "إذا كان المحتوى آمناً، اعرض النافذة. وإلا أرسل تلقائياً",
     sLabelAutoScan: "الفحص التلقائي",
     sDescAutoScan:  "فحص المحتوى عند الضغط على إرسال أو Enter",
-    errorEnglish: "يُرجى كتابة النص بالعربية فقط",
+    errorEnglish:   "يُرجى كتابة النص بالعربية فقط",
     toxLabels: {
       "Normal":            "عادي",
       "Mild Offense":      "مسيء بشكل خفيف",
@@ -40,7 +40,7 @@ const STRINGS = {
       "Privacy Violation": "انتهاك الخصوصية",
       "Obscene":           "محتوى فاضح",
       "Dangerous":         "خطير",
-     "Mental Health": "محتوى نفسي",
+      "Mental Health":     "محتوى نفسي",
     },
     toxBadges: {
       "Normal":            { text: "آمن",    cls: "badge-safe" },
@@ -91,7 +91,7 @@ const STRINGS = {
     sDescShowSafe:  "If content is safe, show popup. Otherwise send automatically",
     sLabelAutoScan: "Auto Scan",
     sDescAutoScan:  "Scan content when Send or Enter is pressed",
-    errorEnglish: "Please write your prompt in Arabic only.",
+    errorEnglish:   "Please write your prompt in Arabic only.",
     toxLabels: {
       "Normal":            "Normal",
       "Mild Offense":      "Mild Offense",
@@ -270,19 +270,24 @@ function buildMaskedHtml(maskedText) {
   });
 }
 
-function buildHighlightHtml(words, scores, isStop, colorHex) {
-  function hexToRgb(hex) {
-    hex = hex.replace("#", "");
-    return `${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)}`;
-  }
+function hexToRgb(hex) {
+  hex = hex.replace("#", "");
+  return `${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)}`;
+}
+
+function buildHighlightHtml(words, scores, isStop, colorHex, piiValues) {
   const rgb = hexToRgb(colorHex);
   return words.map((word, i) => {
-    const score = scores[i];
-    if (isStop[i]) return `<span class="hl-word hl-stop">${word}</span>`;
-    if (score > 0.7) return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});">${word}</span>`;
-    if (score > 0.4) return `<span class="hl-word hl-med"  style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};">${word}</span>`;
-    if (score > 0.1) return `<span class="hl-word hl-low"  style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});">${word}</span>`;
-    return `<span class="hl-word hl-dim">${word}</span>`;
+    const score   = scores[i];
+    const cleaned = word.toLowerCase().replace(/[^\u0600-\u06FFa-z0-9]/g, "");
+    const isPii   = piiValues.has(cleaned);
+    const piiSt   = isPii ? "outline:2px solid #E8520A;outline-offset:2px;" : "";
+
+    if (isStop[i]) return `<span class="hl-word hl-stop" style="${piiSt}">${word}</span>`;
+    if (score > 0.7) return `<span class="hl-word hl-high" style="background:rgba(${rgb},${(0.15+score*0.75).toFixed(2)});${piiSt}">${word}</span>`;
+    if (score > 0.4) return `<span class="hl-word hl-med"  style="background:rgba(${rgb},${(0.1+score*0.65).toFixed(2)});color:${colorHex};${piiSt}">${word}</span>`;
+    if (score > 0.1) return `<span class="hl-word hl-low"  style="background:rgba(${rgb},${(0.05+score*0.4).toFixed(2)});${piiSt}">${word}</span>`;
+    return `<span class="hl-word hl-dim" style="${piiSt}">${word}</span>`;
   }).join(" ");
 }
 
@@ -295,7 +300,7 @@ function renderResult(result) {
 
   el("elapsed-text").textContent = `${S.scannedIn} ${result.elapsed}s`;
 
-  // Masked text
+  // ── Masked text ────────────────────────────────────────
   const maskedBox = el("masked-text");
   if (result.pii && result.pii.length > 0) {
     maskedBox.innerHTML = buildMaskedHtml(result.masked_text);
@@ -303,13 +308,14 @@ function renderResult(result) {
     maskedBox.innerHTML = `<span class="no-pii">${S.noPii}</span>`;
   }
 
-  // Toxicity
+  // ── Toxicity ───────────────────────────────────────────
   const tox = result.tox;
   if (tox) {
     const label = S.toxLabels[tox.prediction] || tox.prediction;
     const badge = S.toxBadges[tox.prediction] || { text: "?", cls: "badge-warn" };
     const color = tox.color || "#00C9A7";
     const conf  = (tox.confidence * 100).toFixed(1);
+
     el("tox-card").style.borderRightColor = color;
     el("tox-label").textContent           = label;
     el("tox-label").style.color           = color;
@@ -319,35 +325,28 @@ function renderResult(result) {
     el("pbar-fill").style.width           = `${conf}%`;
     el("pbar-fill").style.background      = color;
 
-    const hasToxWords = tox.words?.length > 0 && tox.prediction !== "Normal";
-    const hasPiiWords = result.pii && result.pii.length > 0;
-
-    if (hasToxWords || hasPiiWords) {
-      let hlHtml = "";
-
-      // PII entities always shown first with orange highlight
-      if (hasPiiWords) {
-        const piiHtml = result.pii.map(e => {
-          const label = S.piiLabels[e.type] || e.type;
-          return `<span class="hl-word hl-high" style="background:rgba(232,82,10,0.85);color:#fff;font-weight:700;" title="${label}">${e.value}</span>`;
-        }).join(" ");
-        hlHtml += `<div style="margin-bottom:6px;">${piiHtml}</div>`;
+    // ── Keyword highlight with PII outline ────────────────
+    if (tox.words?.length > 0) {
+      // Build set of PII word tokens for fast lookup
+      const piiValues = new Set();
+      if (result.pii && result.pii.length > 0) {
+        result.pii.forEach(e => {
+          e.value.split(/\s+/).forEach(w =>
+            piiValues.add(w.toLowerCase().replace(/[^\u0600-\u06FFa-z0-9]/g, ""))
+          );
+        });
       }
 
-      // Toxicity attention words
-      if (hasToxWords) {
-        hlHtml += buildHighlightHtml(tox.words, tox.scores, tox.is_stop, color);
-      }
-
-      el("hl-words").innerHTML = hlHtml;
+      el("hl-words").innerHTML = buildHighlightHtml(
+        tox.words, tox.scores, tox.is_stop, color, piiValues
+      );
       show("hl-section");
     }
-
   } else {
     el("tox-card").innerHTML = `<div class="no-pii">${S.toxUnavailable}</div>`;
   }
 
-  // Show correct buttons
+  // ── Show correct action buttons ────────────────────────
   const scenario = getScenario(result);
   if      (scenario === "pii")   show("actions-pii");
   else if (scenario === "toxic") show("actions-tox");
@@ -360,6 +359,7 @@ function renderError(msg) {
   const friendly = msg && msg.includes("Arabic") ? S.errorEnglish : (msg || S.errorConn);
   el("error-msg").textContent = friendly;
 }
+
 // ── INIT ──────────────────────────────────────────────────
 async function init() {
   await loadSettings();
@@ -379,7 +379,6 @@ async function init() {
   if (data.scanResult) {
     currentResult = data.scanResult;
     currentMasked = data.scanResult.masked_text || "";
-    // Always render — never auto-send from popup
     renderResult(currentResult);
   } else {
     show("loading-view");
@@ -405,6 +404,7 @@ el("btn-rewrite")?.addEventListener("click", () => {
     tox_label:   tox_label,
   });
 });
+
 el("btn-send-rewritten")?.addEventListener("click", () => {
   if (!rewrittenText) return;
   sendDecision("rewritten");
