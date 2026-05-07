@@ -55,9 +55,7 @@ ARABIC_STOP_WORDS = {
 }
 
 MODELS_DIR = Path("models")
-
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
-
+HF_TOKEN   = os.environ.get("HF_TOKEN", "")
 LATIN_OR_DIGIT = re.compile(r'[a-zA-Z0-9]')
 
 # ─────────────────────────────────────────────────────────────
@@ -116,13 +114,11 @@ def regex_detect(text):
 # ID / CREDENTIAL POST-FILTER
 # ─────────────────────────────────────────────────────────────
 def _is_valid_id_or_credential(value: str) -> bool:
-    """Return True only if value could plausibly be an ID or credential."""
     if not value or len(value.strip()) < 2:
         return False
     return bool(LATIN_OR_DIGIT.search(value))
- 
+
 def _filter_entities(entities: list) -> list:
-    """Remove ID/CREDENTIAL detections that are provably wrong."""
     filtered = []
     for e in entities:
         if e['type'] in ('ID', 'CREDENTIAL'):
@@ -144,8 +140,7 @@ def load_arabert():
         model = AutoModelForTokenClassification.from_pretrained(str(path))
         model.eval()
         vocab_file = next(
-            (p for p in [path/"tag_vocab.json", path/"tag_vocab_aug.json"] if p.exists()),
-            None
+            (p for p in [path/"tag_vocab.json", path/"tag_vocab_aug.json"] if p.exists()), None
         )
         if vocab_file is None:
             return None, None, None
@@ -157,7 +152,6 @@ def load_arabert():
         print("AraBERT load error:", e)
         return None, None, None
 
-
 def load_xlmr():
     path = MODELS_DIR / "xlmr_pii" / "xlmr_pii_augmorg"
     if not path.exists():
@@ -168,8 +162,7 @@ def load_xlmr():
         model = AutoModelForTokenClassification.from_pretrained(str(path))
         model.eval()
         vocab_file = next(
-            (p for p in [path/"tag_vocab.json", path/"tag_vocab_augmorg.json"] if p.exists()),
-            None
+            (p for p in [path/"tag_vocab.json", path/"tag_vocab_augmorg.json"] if p.exists()), None
         )
         if vocab_file is None:
             return None, None, None
@@ -181,12 +174,10 @@ def load_xlmr():
         print("XLMR load error:", e)
         return None, None, None
 
-
 def load_toxicity():
     path = MODELS_DIR / "tox_model"
     if not path.exists():
         return None, None
-
     ckpt_file = None
     for candidate in ["arabert_expanded.pt", "arabert_contrast.pt", "best_model.pt"]:
         if (path / candidate).exists():
@@ -196,18 +187,13 @@ def load_toxicity():
         pts = list(path.glob("*.pt"))
         if pts:
             ckpt_file = pts[0]
-
     if ckpt_file is None:
         return None, None
-
     try:
-        NUM_CLASSES = 7
-        BASE_MODEL  = "aubmindlab/bert-base-arabertv02"
-        tok   = AutoTokenizer.from_pretrained(BASE_MODEL)
+        tok   = AutoTokenizer.from_pretrained("aubmindlab/bert-base-arabertv02")
         model = AutoModelForSequenceClassification.from_pretrained(
-            BASE_MODEL, num_labels=NUM_CLASSES,
-            ignore_mismatched_sizes=True,
-            attn_implementation="eager",
+            "aubmindlab/bert-base-arabertv02", num_labels=7,
+            ignore_mismatched_sizes=True, attn_implementation="eager",
         )
         ckpt = torch.load(str(ckpt_file), map_location="cpu", weights_only=False)
         model.load_state_dict(ckpt["model_state_dict"])
@@ -249,14 +235,13 @@ def _token_overlaps_regex(tok_s, tok_e, tok_char, regex_spans):
     ce = tok_char.get(tok_e - 1, tok_char[tok_s])[1]
     return any(not (ce <= rs or cs >= re_) for rs, re_ in regex_spans)
 
-CHUNK_SIZE    = 200  # tokens per chunk
-CHUNK_OVERLAP = 30   # overlap to catch boundary entities
+CHUNK_SIZE    = 200
+CHUNK_OVERLAP = 30
 
 def _predict_ner(text, tokenizer, model, id2tag):
     tokens = text.split()
     if not tokens: return []
 
-    # Build overlapping chunks
     chunks = []
     start  = 0
     while start < len(tokens):
@@ -287,8 +272,7 @@ def _predict_ner(text, tokenizer, model, id2tag):
             if tag.startswith("B-"):
                 if cur:
                     entities.append({
-                        "value": " ".join(cur_toks),
-                        "type":  cur,
+                        "value": " ".join(cur_toks), "type": cur,
                         "token_start": chunk_start + i - len(cur_toks),
                         "token_end":   chunk_start + i,
                     })
@@ -298,48 +282,26 @@ def _predict_ner(text, tokenizer, model, id2tag):
             else:
                 if cur:
                     entities.append({
-                        "value": " ".join(cur_toks),
-                        "type":  cur,
+                        "value": " ".join(cur_toks), "type": cur,
                         "token_start": chunk_start + i - len(cur_toks),
                         "token_end":   chunk_start + i,
                     })
                 cur, cur_toks = None, []
         if cur:
             entities.append({
-                "value": " ".join(cur_toks),
-                "type":  cur,
+                "value": " ".join(cur_toks), "type": cur,
                 "token_start": chunk_start + len(chunk_tokens) - len(cur_toks),
                 "token_end":   chunk_start + len(chunk_tokens),
             })
         all_entities.extend(entities)
 
-    # De-duplicate: remove same value+type detected in overlapping chunks
-    seen    = set()
-    unique  = []
+    seen, unique = set(), []
     for e in all_entities:
         key = (e["value"].strip(), e["type"])
         if key not in seen:
             seen.add(key)
             unique.append(e)
-
     return unique
-
-def _bio_to_spans(tokens, labels):
-    spans, cur_label, cur_toks, cur_start = [], None, [], None
-    for i, (tok, lbl) in enumerate(zip(tokens, labels)):
-        if lbl.startswith('B-'):
-            if cur_label:
-                spans.append((cur_label, cur_start, i, cur_toks[:]))
-            cur_label, cur_start, cur_toks = lbl[2:], i, [tok]
-        elif lbl.startswith('I-') and cur_label == lbl[2:]:
-            cur_toks.append(tok)
-        else:
-            if cur_label:
-                spans.append((cur_label, cur_start, i, cur_toks[:]))
-            cur_label, cur_start, cur_toks = None, None, []
-    if cur_label:
-        spans.append((cur_label, cur_start, len(tokens), cur_toks[:]))
-    return spans
 
 # ─────────────────────────────────────────────────────────────
 # HYBRID PII DETECTOR
@@ -349,8 +311,8 @@ def hybrid_detect(text, ar_tok, ar_mdl, ar_id2tag, xl_tok, xl_mdl, xl_id2tag):
     regex_spans = [(e['char_start'], e['char_end']) for e in regex_ents]
     all_ents    = list(regex_ents)
 
-    cleaned = clean_arabic(text)
-    tokens  = cleaned.split()
+    cleaned  = clean_arabic(text)
+    tokens   = cleaned.split()
     if not tokens:
         return all_ents
 
@@ -389,26 +351,38 @@ def predict_toxicity_with_attention(text, tokenizer, model):
     processed = clean_arabic(text)
     if not processed: return None
 
-    # Split into word chunks of 100 words with 20 word overlap
-    words_all = processed.split()
+    # Build original→cleaned word mapping for display
+    # so numbers/Latin tokens from original appear in the output
+    orig_words    = text.split()
+    cleaned_words = processed.split()
+
+    # Map each cleaned word back to its original counterpart
+    # by aligning tokens in order (cleaned has same count as Arabic words)
+    orig_map = {}  # cleaned_word_index -> original_word
+    ci = 0
+    for ow in orig_words:
+        cw = clean_arabic(ow)
+        if cw and ci < len(cleaned_words) and cleaned_words[ci] == cw:
+            orig_map[ci] = ow
+            ci += 1
+
     CHUNK_W   = 100
     OVERLAP_W = 20
 
-    if len(words_all) <= CHUNK_W:
-        # Short enough — process as single chunk (original behavior)
-        chunks = [processed]
+    if len(cleaned_words) <= CHUNK_W:
+        chunks = [(0, processed)]
     else:
         chunks = []
         start  = 0
-        while start < len(words_all):
-            end = min(start + CHUNK_W, len(words_all))
-            chunks.append(" ".join(words_all[start:end]))
-            if end == len(words_all): break
+        while start < len(cleaned_words):
+            end = min(start + CHUNK_W, len(cleaned_words))
+            chunks.append((start, " ".join(cleaned_words[start:end])))
+            if end == len(cleaned_words): break
             start += CHUNK_W - OVERLAP_W
 
     best_result = None
 
-    for chunk_text in chunks:
+    for chunk_offset, chunk_text in chunks:
         enc  = tokenizer(chunk_text, max_length=128, padding="max_length",
                          truncation=True, return_tensors="pt")
         ids  = enc["input_ids"]
@@ -424,7 +398,6 @@ def predict_toxicity_with_attention(text, tokenizer, model):
         pred_label = TOX_IDX2LABEL[pred_idx]
         confidence = float(probs[pred_idx])
 
-        # Keep the most harmful prediction across all chunks
         SEVERITY = {
             "Normal": 0, "Mild Offense": 1, "Offensive": 2,
             "Privacy Violation": 2, "Obscene": 3,
@@ -434,14 +407,14 @@ def predict_toxicity_with_attention(text, tokenizer, model):
            SEVERITY.get(pred_label, 0) > SEVERITY.get(best_result["prediction"], 0) or \
            (pred_label == best_result["prediction"] and confidence > best_result["confidence"]):
 
-            # Extract attention for this chunk
-            attn   = torch.stack(out.attentions)[:, 0, :, 0, :].mean(dim=(0,1)).cpu().numpy()
-            tokens = tokenizer.convert_ids_to_tokens(ids.squeeze().cpu().numpy())
+            attn       = torch.stack(out.attentions)[:, 0, :, 0, :].mean(dim=(0,1)).cpu().numpy()
+            toks       = tokenizer.convert_ids_to_tokens(ids.squeeze().cpu().numpy())
             actual_len = mask.sum().item()
-            tokens, attn = tokens[:actual_len], attn[:actual_len]
+            toks, attn = toks[:actual_len], attn[:actual_len]
 
+            # Reconstruct words from subword tokens
             words, scores, cur_w, cur_s = [], [], "", []
-            for tok, sc in zip(tokens, attn):
+            for tok, sc in zip(toks, attn):
                 if tok in ["[CLS]","[SEP]","[PAD]","<s>","</s>","<pad>"]: continue
                 if tok.startswith("##"): cur_w += tok[2:]; cur_s.append(sc)
                 elif tok.startswith("+"): cur_w += tok.replace("+",""); cur_s.append(sc)
@@ -449,6 +422,14 @@ def predict_toxicity_with_attention(text, tokenizer, model):
                     if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
                     cur_w, cur_s = tok.replace("+",""), [sc]
             if cur_w: words.append(cur_w); scores.append(float(max(cur_s)))
+
+            # Map cleaned words back to original (restores numbers, Latin, etc.)
+            display_words = []
+            for i, w in enumerate(words):
+                global_idx = chunk_offset + i
+                # Try to find original word that cleans to this word
+                orig = orig_map.get(global_idx, w)
+                display_words.append(orig)
 
             scores_arr = np.array(scores, dtype=float)
             filtered   = np.array([0.0 if w in ARABIC_STOP_WORDS else s
@@ -460,7 +441,7 @@ def predict_toxicity_with_attention(text, tokenizer, model):
                 "prediction": pred_label,
                 "confidence": confidence,
                 "all_probs":  {TOX_IDX2LABEL[i]: float(p) for i, p in enumerate(probs)},
-                "words":      words,
+                "words":      display_words,   # original words with numbers/Latin preserved
                 "scores":     filtered.tolist(),
                 "is_stop":    is_stop,
             }
@@ -478,8 +459,7 @@ def build_masked_text(text, entities):
     out = text
     for e in char_ents:
         out = out[:e["char_start"]] + f'[{e["type"]}]' + out[e["char_end"]:]
-    tok_ents = [e for e in entities if "token_start" in e]
-    for e in tok_ents:
+    for e in [e for e in entities if "token_start" in e]:
         if e["value"] and e["value"] in out:
             out = out.replace(e["value"], f'[{e["type"]}]', 1)
     return out
@@ -504,7 +484,7 @@ def run_scan(text, ar_tok, ar_mdl, ar_id2tag, xl_tok, xl_mdl, xl_id2tag, tx_tok,
     t1.start(); t2.start()
     t1.join();  t2.join()
 
-    pii_ents    = results.get("pii", [])
-    masked_text = build_masked_text(text, pii_ents)
+    pii_ents           = results.get("pii", [])
+    masked_text        = build_masked_text(text, pii_ents)
     results["masked_text"] = masked_text
     return results
