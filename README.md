@@ -10,10 +10,7 @@ When a user types a prompt and presses Send or Enter on a supported platform, Pr
 
 - ChatGPT (chatgpt.com)
 - Google Gemini (gemini.google.com)
-- Claude (claude.ai)
-- Microsoft Copilot (copilot.microsoft.com)
-- Perplexity (perplexity.ai)
-
+  
 ## File Structure
 
 ```
