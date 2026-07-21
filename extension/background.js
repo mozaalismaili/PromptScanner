@@ -1,4 +1,4 @@
-const API_URL = "https://promptscanner-production.up.railway.app";
+const API_URL = "https://scan.aliflabs.ai";
 
 let currentTabId = null;
 let isScanning   = false;
