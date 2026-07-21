@@ -29,7 +29,7 @@
     "https://claude.ai/*",
     "https://copilot.microsoft.com/*",
     "https://www.perplexity.ai/*",
-    "https://*.up.railway.app/*"
+    "https://scan.aliflabs.ai/*"
   ],
   "content_scripts": [
     {
